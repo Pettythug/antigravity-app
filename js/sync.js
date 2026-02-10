@@ -235,6 +235,17 @@ const SYNC = window.SYNC = (function() {
                     }
                 }
 
+                if (dataChanged) {
+                    console.log("State Updated. Dispatching Event...");
+                    const event = new CustomEvent('ag-state-updated', { 
+                        detail: { 
+                            sessionId: getSessionId(), // Current ID (Updated)
+                            logsCount: localLogs.length // Current Log Count
+                        } 
+                    });
+                    window.dispatchEvent(event);
+                }
+
                 notifyStatus('green');
                 return { status: 'success', data: data.data, dataChanged: dataChanged };
             }

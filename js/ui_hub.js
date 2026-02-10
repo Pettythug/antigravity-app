@@ -43,24 +43,28 @@ const HUB = (function() {
             // Render Dashboard
             renderDashboard();
             
-            // Background Sync
-            SYNC.pullState().then(res => {
-                if(res.status === 'success') {
-                    // v3.8: Enhanced Refresh Logic
-                    if (res.dataChanged) {
-                        console.log("Data Changed during Pull. Refreshing UI...");
-                        // 1. If Session ID changed, hard reload
-                        if(SYNC.getSessionId() !== sessId) {
-                            location.reload();
-                        } else {
-                            // 2. If just logs/hydration, refresh status checks
-                            refreshCompletionStatus(); // Updates Green Checks
-                            // If we were showing PBs in the Hub, we'd update them here.
-                            // Since PBs are in Modules, they will catch the new data when opened.
-                        }
-                    }
+            // Event Listener for Dynamic Updates (v3.8)
+            window.addEventListener('ag-state-updated', (e) => {
+                const newId = e.detail.sessionId;
+                if (newId !== parseInt(currentSession.id)) {
+                    console.log(`Session ID changed (UI: ${currentSession.id} -> Cloud: ${newId}). Refreshing...`);
+                    // Update Internal State
+                    currentSession = ENGINE.getSessionInfo(newId);
+                    
+                    // Update Completion Status for new session
+                    refreshCompletionStatus().then(() => {
+                        // Re-render Dashboard
+                        renderDashboard();
+                    });
+                } else {
+                    // ID didn't change, but data did (Hydration?). Refresh completion just in case.
+                    console.log("Data refreshed (Hydration). Updating UI...");
+                    refreshCompletionStatus(); // Will trigger updateDashboardStatus
                 }
             });
+
+            // Background Sync (Fire & Forget, Event will handle UI update)
+            SYNC.pullState();
         } catch (e) {
             console.error(e);
             document.getElementById('app-container').innerHTML = `
