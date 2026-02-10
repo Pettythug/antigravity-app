@@ -95,16 +95,42 @@ const SYNC = window.SYNC = (function() {
     // v3.0 PB Logic adapted for Array
     async function getPBForRepRange(exerciseName, targetReps) {
         const logs = getLocalLogs();
-        let minReps = parseInt(targetReps);
+        
+        // 1. Parse Range (e.g. "4-6" -> 4)
+        let minReps = 1;
+        if (typeof targetReps === 'string' && targetReps.includes('-')) {
+            minReps = parseInt(targetReps.split('-')[0]);
+        } else {
+            minReps = parseInt(targetReps);
+        }
         if(isNaN(minReps)) minReps = 1;
 
-        // Filter by exercise and Reps
-        const matches = logs.filter(l => l.exercise === exerciseName && l.reps >= minReps);
+        const cleanName = exerciseName.trim().toLowerCase();
+
+        // 2. Filter by exercise and Reps >= minReps
+        const matches = logs.filter(l => {
+            if (!l.exercise) return false;
+            return l.exercise.trim().toLowerCase() === cleanName && parseFloat(l.reps) >= minReps;
+        });
+
         if (matches.length === 0) return null;
 
-        // Find Max Weight
-        const maxWeight = matches.reduce((max, l) => Math.max(max, parseFloat(l.weight) || 0), 0);
-        return maxWeight > 0 ? maxWeight : null;
+        // 3. Find Max Weight (Tie-break with Reps)
+        // Sort distinct sets by Weight DESC, then Reps DESC
+        matches.sort((a, b) => {
+            const wA = parseFloat(a.weight) || 0;
+            const wB = parseFloat(b.weight) || 0;
+            if (wA !== wB) return wB - wA; // Higher weight first
+            
+            const rA = parseFloat(a.reps) || 0;
+            const rB = parseFloat(b.reps) || 0;
+            return rB - rA; // Higher reps first
+        });
+
+        const best = matches[0];
+        const bestWeight = parseFloat(best.weight) || 0;
+        
+        return bestWeight > 0 ? bestWeight : null;
     }
 
     // v3.8: Ghost Values / History
@@ -139,7 +165,7 @@ const SYNC = window.SYNC = (function() {
     // CONFIG & API Bridge
     // CONFIG & API Bridge
     // v3.7 Hardcoded URL (Recovered from v2.8)
-    const SCRIPT_URL = "https://script.google.com/macros/s/AKfycbzn6Ms8ytLI7YLKPfMvoFP-rhv-QpV7rSimBfWTYUrg3WarcDS89Ht4wVRVq3y59cIgoA/exec";
+    const SCRIPT_URL = "https://script.google.com/macros/s/AKfycbxMPwwjgHMIjl6UkdjZNuCqsSCPIw8PpD7ZJ-bkeWZSkedjL3MlKoL_fu9rGWH-VFE_1Q/exec";
     
     let onSyncStatus = null;
     function registerStatusCallback(cb) { onSyncStatus = cb; }
