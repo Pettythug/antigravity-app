@@ -43,27 +43,47 @@ const GRIND = window.GRIND = (function() {
         `;
 
         // Render initial rows
+        // v3.8: Ghost Values from Last Session
+        const lastLog = SYNC.getLastLog(context.exerciseName);
+        // Note: lastLog is just the *last set* logged, or we might need the whole session?
+        // Usually we want the sets from the last *Unique Session*.
+        // But for simplicity, we'll just look at relevant history if we wanted perfectly matched sets.
+        // For now, let's just pass the last weight if available to all rows, or try to map index?
+        // Actually, getHistory returns all logs. We can find the sets from the most recent session.
+        
+        let ghostSets = [];
+        if (lastLog) {
+            const hist = SYNC.getHistory(context.exerciseName);
+            // Get all logs with same sessionId as the last log
+            ghostSets = hist.filter(l => l.sessionId === lastLog.sessionId).sort((a,b) => a.setNumber - b.setNumber);
+        }
+
         for(let i=0; i<rowCount; i++) {
-            renderRow(i);
+            const ghost = ghostSets[i] || {};
+            renderRow(i, ghost.weight, ghost.reps);
         }
 
         // Fetch PB
         const pb = await SYNC.getPBForRepRange(context.exerciseName, cleanTarget);
         if(pb) {
-            document.getElementById('g-pb-disp').innerText = `PB (${cleanTarget}): ${pb} lbs`;
+            document.getElementById('g-pb-disp').innerText = `PB (${cleanTarget}RM): ${pb} lbs`;
         }
     }
 
-    function renderRow(index) {
+    function renderRow(index, ghostWeight, ghostReps) {
         const container = document.getElementById('grind-rows');
         const div = document.createElement('div');
         div.className = 'log-row';
         div.style.marginBottom = "12px";
+        
+        const phWeight = ghostWeight ? ghostWeight : 'Lbs';
+        const phReps = ghostReps ? ghostReps : 'Reps';
+
         div.innerHTML = `
             <div style="font-size: 0.8rem; color: #888; margin-bottom: 4px;">SET ${index+1}</div>
             <div style="display: flex; gap: 8px;">
-                <input type="number" class="inp-weight" placeholder="Lbs" inputmode="decimal" pattern="\\d*" style="flex:1; font-size: 1.4rem; padding: 12px; background: #222; border: 1px solid #444; color: white; border-radius: 6px;">
-                <input type="number" class="inp-reps" placeholder="Reps" inputmode="decimal" pattern="\\d*" style="flex:1; font-size: 1.4rem; padding: 12px; background: #222; border: 1px solid #444; color: white; border-radius: 6px;">
+                <input type="number" class="inp-weight" placeholder="${phWeight}" inputmode="decimal" pattern="\\d*" style="flex:1; font-size: 1.4rem; padding: 12px; background: #222; border: 1px solid #444; color: white; border-radius: 6px;">
+                <input type="number" class="inp-reps" placeholder="${phReps}" inputmode="decimal" pattern="\\d*" style="flex:1; font-size: 1.4rem; padding: 12px; background: #222; border: 1px solid #444; color: white; border-radius: 6px;">
                 <select class="inp-rpe" style="width: 70px; font-size: 1.2rem; background: #222; border: 1px solid #444; color: white; border-radius: 6px;">
                     <option value="" disabled selected>RPE</option>
                     <option value="7">7</option>

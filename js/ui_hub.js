@@ -46,8 +46,18 @@ const HUB = (function() {
             // Background Sync
             SYNC.pullState().then(res => {
                 if(res.status === 'success') {
-                    if(SYNC.getSessionId() !== sessId) {
-                        location.reload();
+                    // v3.8: Enhanced Refresh Logic
+                    if (res.dataChanged) {
+                        console.log("Data Changed during Pull. Refreshing UI...");
+                        // 1. If Session ID changed, hard reload
+                        if(SYNC.getSessionId() !== sessId) {
+                            location.reload();
+                        } else {
+                            // 2. If just logs/hydration, refresh status checks
+                            refreshCompletionStatus(); // Updates Green Checks
+                            // If we were showing PBs in the Hub, we'd update them here.
+                            // Since PBs are in Modules, they will catch the new data when opened.
+                        }
                     }
                 }
             });

@@ -107,6 +107,17 @@ const SYNC = window.SYNC = (function() {
         return maxWeight > 0 ? maxWeight : null;
     }
 
+    // v3.8: Ghost Values / History
+    function getHistory(exerciseName) {
+        const logs = getLocalLogs();
+        return logs.filter(l => l.exercise === exerciseName).sort((a,b) => new Date(b.timestamp) - new Date(a.timestamp));
+    }
+
+    function getLastLog(exerciseName) {
+        const hist = getHistory(exerciseName);
+        return hist.length > 0 ? hist[0] : null;
+    }
+
     // --- 3. STORAGE & SYNC (Shared) ---
 
     const KEY_SESSION = 'AG_SESSION_ID';
@@ -152,24 +163,54 @@ const SYNC = window.SYNC = (function() {
             const res = await fetch(config.apiUrl, { method: 'GET', mode: 'cors', credentials: 'omit' });
             const data = await res.json();
              if (data.status === 'success') {
-                if (data.data.CurrentSessionID) setSessionId(parseInt(data.data.CurrentSessionID));
+                let dataChanged = false;
+
+                // 1. Session Sync
+                if (data.data.CurrentSessionID) {
+                    const current = getSessionId();
+                    const cloudId = parseInt(data.data.CurrentSessionID);
+                    if (cloudId !== current) {
+                        setSessionId(cloudId);
+                        dataChanged = true;
+                    }
+                }
                 
-                // v3.8 HYDRATION LOGIC
-                // If LocalStorage is empty, populate it with Cloud Data
-                const localLogs = getLocalLogs();
-                if (localLogs.length === 0 && data.data.logs && Array.isArray(data.data.logs)) {
-                    console.log(`Hydrating ${data.data.logs.length} logs from Cloud...`);
-                    // Ensure we save it to LocalStorage
-                    saveLocalLogs(data.data.logs);
+                // 2. Hydration (Merge Strategy)
+                if (data.data.logs && Array.isArray(data.data.logs)) {
+                    const localLogs = getLocalLogs();
+                    const cloudLogs = data.data.logs;
                     
-                    // Force a reload might be needed if the UI is already rendered? 
-                    // But Hub renders after init. pullState is usually async in background. 
-                    // If we hydrate, we might want to trigger a refresh of PBs or UI.
-                    // For now, we just save. The user can reload or next module open will see it.
+                    // Create a lookup for existing IDs to prevent duplicates
+                    // We also check Timestamp+Exercise to prevent "Roundtrip Duplicates" 
+                    // (since cloud IDs are synthetic 'cloud_XYZ', but local IDs are timestamps)
+                    const localIdSet = new Set(localLogs.map(l => l.id));
+                    const localContentSig = new Set(localLogs.map(l => `${l.timestamp}|${l.exercise}`));
+
+                    let newLogs = [];
+
+                    cloudLogs.forEach(cl => {
+                        // Check 1: Does this specific Cloud ID already exist? (Prevent re-hydrating same cloud row)
+                        if (localIdSet.has(cl.id)) return;
+
+                        // Check 2: Does a local log with same timestamp/exercise exist? (Prevent Cloud version of Local log)
+                        const sig = `${cl.timestamp}|${cl.exercise}`;
+                        if (localContentSig.has(sig)) return;
+
+                        // If unique, add it
+                        newLogs.push(cl);
+                    });
+
+                    if (newLogs.length > 0) {
+                        console.log(`Hydrating: Merging ${newLogs.length} new logs from Cloud.`);
+                        // Append and Save
+                        const updated = localLogs.concat(newLogs);
+                        saveLocalLogs(updated);
+                        dataChanged = true;
+                    }
                 }
 
                 notifyStatus('green');
-                return { status: 'success', data: data.data };
+                return { status: 'success', data: data.data, dataChanged: dataChanged };
             }
             notifyStatus('red');
             return { status: 'error', message: data.message };
@@ -252,6 +293,8 @@ const SYNC = window.SYNC = (function() {
         pullState,
         pushLogs,
         getPBForRepRange,
+        getHistory, 
+        getLastLog,
         registerStatusCallback,
         manualSync
     };

@@ -43,8 +43,17 @@ const POWER = window.POWER = (function() {
         `;
         
         // Render Initial Rows
+        // v3.8: Ghost Values from Last Session
+        const lastLog = SYNC.getLastLog(context.exerciseName);
+        let ghostSets = [];
+        if (lastLog) {
+            const hist = SYNC.getHistory(context.exerciseName);
+            ghostSets = hist.filter(l => l.sessionId === lastLog.sessionId).sort((a,b) => a.setNumber - b.setNumber);
+        }
+
         for(let i=0; i<rowCount; i++) {
-            renderRow(i, target);
+            const ghost = ghostSets[i] || {};
+            renderRow(i, target, ghost.weight);
         }
 
         // Fetch PB
@@ -54,19 +63,18 @@ const POWER = window.POWER = (function() {
         }
     }
 
-    function renderRow(index, defaultReps) {
+    function renderRow(index, defaultReps, ghostWeight) {
         const container = document.getElementById('power-rows');
         const div = document.createElement('div');
         div.className = 'log-row';
         div.style.marginBottom = "12px";
         
-        // Use placeholder for Reps so it's a ghost value not a pre-filled value
-        // Add inputmode="decimal" for mobile numeric keypad
-        
+        const phWeight = ghostWeight ? ghostWeight : 'Lbs';
+
         div.innerHTML = `
             <div style="font-size: 0.8rem; color: #888; margin-bottom: 4px;">SET ${index+1}</div>
             <div style="display: flex; gap: 8px;">
-                <input type="number" class="inp-weight" placeholder="Lbs" inputmode="decimal" pattern="\\d*" style="flex:1; font-size: 1.4rem; padding: 12px; background: #222; border: 1px solid #444; color: white; border-radius: 6px;">
+                <input type="number" class="inp-weight" placeholder="${phWeight}" inputmode="decimal" pattern="\\d*" style="flex:1; font-size: 1.4rem; padding: 12px; background: #222; border: 1px solid #444; color: white; border-radius: 6px;">
                 <input type="number" class="inp-reps" placeholder="${defaultReps || 'Reps'}" inputmode="decimal" pattern="\\d*" style="flex:1; font-size: 1.4rem; padding: 12px; background: #222; border: 1px solid #444; color: white; border-radius: 6px;">
                 <select class="inp-rpe" style="width: 70px; font-size: 1.2rem; background: #222; border: 1px solid #444; color: white; border-radius: 6px;">
                     <option value="" disabled selected>RPE</option>

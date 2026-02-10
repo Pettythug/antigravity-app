@@ -1,54 +1,73 @@
 function doGet(e) {
-  const ss = SpreadsheetApp.openById("1pFR03-TmhizQfIW6T0bBKXg7faKQ9s1AklEXhyEGDW0");
-  const sheet = ss.getSheetByName("Logs");
-  const configSheet = ss.getSheetByName("Config");
-  
-  let currentSessionId = 1;
-  if (configSheet) {
-    const lastRow = configSheet.getLastRow();
-    if (lastRow > 1) {
-      currentSessionId = configSheet.getRange(lastRow, 1).getValue();
-    }
-  }
-
-  // Hydration: Fetch last 100 logs
-  let logs = [];
-  if (sheet) {
-    const lastRow = sheet.getLastRow();
-    // Assuming headers are row 1. Data starts row 2.
-    // Columns: Timestamp(1), SessionID(2), Slot(3), Exercise(4), Weight(5), Reps(6), RPE(7), Notes(8)
+  try {
+    const ss = SpreadsheetApp.openById("1pFR03-TmhizQfIW6T0bBKXg7faKQ9s1AklEXhyEGDW0");
+    const sheet = ss.getSheetByName("Logs");
+    const configSheet = ss.getSheetByName("Config");
     
-    if (lastRow > 1) {
-      const numRows = Math.min(lastRow - 1, 100);
-      const startRow = lastRow - numRows + 1;
-      const data = sheet.getRange(startRow, 1, numRows, 8).getValues();
+    let currentSessionId = 1;
+    if (configSheet) {
+      const lastRow = configSheet.getLastRow();
+      if (lastRow > 1) {
+        currentSessionId = configSheet.getRange(lastRow, 1).getValue();
+      }
+    }
+
+    // Hydration: Fetch last 100 logs
+    let logs = [];
+    if (sheet) {
+      const lastRow = sheet.getLastRow();
       
-      // Map to Object
-      logs = data.map((row, i) => ({
-        id: "cloud_" + (startRow + i), // Synthetic ID for local ref
-        timestamp: row[0],
-        sessionId: row[1],
-        slot: row[2],
-        exercise: row[3],
-        weight: row[4],
-        reps: row[5],
-        rpe: row[6],
-        notes: row[7],
-        synced: 1 // Coming from cloud, so it is synced
-      }));
+      if (lastRow > 1) {
+        // v3.8 Fix: Ensure we don't go out of bounds if < 100 rows
+        const numRows = Math.min(lastRow - 1, 150); 
+        const startRow = lastRow - numRows + 1;
+        
+        // v3.8 Fix: Get Display Values to safely handle Dates? 
+        // No, getValues() is better for raw types, but we must handle Date objects in JSON.
+        const data = sheet.getRange(startRow, 1, numRows, 8).getValues();
+        
+        // Map to Object
+        logs = data.map((row, i) => {
+          // Normalize Timestamp
+          let ts = row[0];
+          if (ts instanceof Date) {
+            ts = ts.toISOString();
+          }
+
+          return {
+            id: "cloud_" + (startRow + i), 
+            timestamp: ts,
+            sessionId: row[1],
+            slot: row[2],
+            exercise: row[3],
+            weight: row[4],
+            reps: row[5],
+            rpe: row[6],
+            notes: row[7],
+            synced: 1
+          };
+        });
+      }
     }
+
+    const result = {
+      status: "success",
+      data: {
+        CurrentSessionID: currentSessionId,
+        logs: logs
+      }
+    };
+
+    return ContentService.createTextOutput(JSON.stringify(result))
+      .setMimeType(ContentService.MimeType.JSON);
+
+  } catch (err) {
+    // v3.8 Debugging: Return error in JSON so client sees it
+    return ContentService.createTextOutput(JSON.stringify({
+      status: "error",
+      message: err.toString()
+    })).setMimeType(ContentService.MimeType.JSON);
   }
-
-  const result = {
-    status: "success",
-    data: {
-      CurrentSessionID: currentSessionId,
-      logs: logs
-    }
-  };
-
-  return ContentService.createTextOutput(JSON.stringify(result))
-    .setMimeType(ContentService.MimeType.JSON);
 }
 
 function doPost(e) {
