@@ -51,6 +51,9 @@ const HUB = (function() {
                     // Update Internal State
                     currentSession = ENGINE.getSessionInfo(newId);
                     
+                    // v3.8 Fix: Update Snapshot for the new session!
+                    loadSnapshot(newId);
+
                     // Update Completion Status for new session
                     refreshCompletionStatus().then(() => {
                         // Re-render Dashboard
