@@ -13,6 +13,9 @@ const SYNC = window.SYNC = (function() {
     // KEY_LOGS declared above implies the log storage key
 
     async function initDB() {
+        if(localStorage.getItem(KEY_LOGS) === null) {
+            localStorage.setItem(KEY_LOGS, JSON.stringify([]));
+        }
         console.log("Storage Ready (LocalStorage).");
     }
 
@@ -164,6 +167,29 @@ const SYNC = window.SYNC = (function() {
             const data = await res.json();
              if (data.status === 'success') {
                 if (data.data.CurrentSessionID) setSessionId(parseInt(data.data.CurrentSessionID));
+                
+                // HYDRATION LOGIC (v3.7.2 Fix)
+                if (data.data.logs && Array.isArray(data.data.logs)) {
+                    console.log("Hydrated Logs Count:", data.data.logs.length);
+                    // Safe Merge: Server Logs + Pending Local Logs
+                    const localLogs = getLocalLogs();
+                    const pending = localLogs.filter(l => l.synced === 0);
+                    
+                    const serverLogs = data.data.logs;
+                    const merged = [...serverLogs];
+                    
+                    // Add pending if they aren't in server list (by ID)
+                    pending.forEach(p => {
+                        if(!merged.find(m => m.id === p.id)) {
+                            merged.push(p);
+                        }
+                    });
+                    
+                    localStorage.setItem(KEY_LOGS, JSON.stringify(merged));
+                } else {
+                    console.log("Hydrated Logs Count: 0 (No logs in response)");
+                }
+
                 notifyStatus('green');
                 return { status: 'success', data: data.data };
             }
