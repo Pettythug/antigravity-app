@@ -1,6 +1,6 @@
 /**
- * ANTIGRAVITY v3.8 - DATA HYDRATION (LocalStorage)
- * Handles: LocalStorage Data, Async Cloud Sync, Cold Start Hydration
+ * ANTIGRAVITY v3.7 - CLEAN CORE (LocalStorage)
+ * Handles: LocalStorage Data, Async Google Sheets Sync
  */
 
 const SYNC = window.SYNC = (function() {
@@ -92,41 +92,19 @@ const SYNC = window.SYNC = (function() {
          return getLocalLogs().filter(l => l.sessionId == sessionId);
     }
     
-    // v3.8 PB Logic (User Provided Optimized)
-    async function getPBForRepRange(exerciseName) {
+    // v3.0 PB Logic adapted for Array
+    async function getPBForRepRange(exerciseName, targetReps) {
         const logs = getLocalLogs();
-        if (logs.length === 0) return null;
-        
-        const searchName = exerciseName.toLowerCase().trim();
-        
-        // Find all matches for this exercise (Fuzzy Match)
-        const matches = logs.filter(l => 
-            l.exercise && l.exercise.toLowerCase().trim().includes(searchName) &&
-            parseFloat(l.weight) > 0
-        );
-        
+        let minReps = parseInt(targetReps);
+        if(isNaN(minReps)) minReps = 1;
+
+        // Filter by exercise and Reps
+        const matches = logs.filter(l => l.exercise === exerciseName && l.reps >= minReps);
         if (matches.length === 0) return null;
-        
-        // Sort by weight descending, then reps descending
-        matches.sort((a, b) => {
-            const weightDiff = parseFloat(b.weight) - parseFloat(a.weight);
-            if (weightDiff !== 0) return weightDiff;
-            return parseInt(b.reps) - parseInt(a.reps);
-        });
-        
-        const best = matches[0];
-        return { weight: best.weight, reps: best.reps };
-    }
 
-    // v3.8: Ghost Values / History
-    function getHistory(exerciseName) {
-        const logs = getLocalLogs();
-        return logs.filter(l => l.exercise === exerciseName).sort((a,b) => new Date(b.timestamp) - new Date(a.timestamp));
-    }
-
-    function getLastLog(exerciseName) {
-        const hist = getHistory(exerciseName);
-        return hist.length > 0 ? hist[0] : null;
+        // Find Max Weight
+        const maxWeight = matches.reduce((max, l) => Math.max(max, parseFloat(l.weight) || 0), 0);
+        return maxWeight > 0 ? maxWeight : null;
     }
 
     // --- 3. STORAGE & SYNC (Shared) ---
@@ -174,64 +152,9 @@ const SYNC = window.SYNC = (function() {
             const res = await fetch(config.apiUrl, { method: 'GET', mode: 'cors', credentials: 'omit' });
             const data = await res.json();
              if (data.status === 'success') {
-                let dataChanged = false;
-
-                // 1. Session Sync
-                if (data.data.CurrentSessionID) {
-                    const current = getSessionId();
-                    const cloudId = parseInt(data.data.CurrentSessionID);
-                    if (cloudId !== current) {
-                        setSessionId(cloudId);
-                        dataChanged = true;
-                    }
-                }
-                
-                // 2. Hydration (Merge Strategy)
-                if (data.data.logs && Array.isArray(data.data.logs)) {
-                    const localLogs = getLocalLogs();
-                    const cloudLogs = data.data.logs;
-                    
-                    // Create a lookup for existing IDs to prevent duplicates
-                    // We also check Timestamp+Exercise to prevent "Roundtrip Duplicates" 
-                    // (since cloud IDs are synthetic 'cloud_XYZ', but local IDs are timestamps)
-                    const localIdSet = new Set(localLogs.map(l => l.id));
-                    const localContentSig = new Set(localLogs.map(l => `${l.timestamp}|${l.exercise}`));
-
-                    let newLogs = [];
-
-                    cloudLogs.forEach(cl => {
-                        // Check 1: Does this specific Cloud ID already exist? (Prevent re-hydrating same cloud row)
-                        if (localIdSet.has(cl.id)) return;
-
-                        // Check 2: Does a local log with same timestamp/exercise exist? (Prevent Cloud version of Local log)
-                        const sig = `${cl.timestamp}|${cl.exercise}`;
-                        if (localContentSig.has(sig)) return;
-
-                        // If unique, add it
-                        newLogs.push(cl);
-                    });
-
-                    if (newLogs.length > 0) {
-                        console.log(`Hydrating: Merging ${newLogs.length} new logs from Cloud.`);
-                        // Append and Save
-                        const updated = localLogs.concat(newLogs);
-                        saveLocalLogs(updated);
-                        dataChanged = true;
-                    }
-                }
-
-                // v3.8 Fix: Always dispatch event to ensure Hub hydrates/refreshes
-                console.log("State Sync Complete. Dispatching Event...");
-                const event = new CustomEvent('ag-state-updated', { 
-                    detail: { 
-                        sessionId: getSessionId(), 
-                        logsCount: getLocalLogs().length 
-                    } 
-                });
-                window.dispatchEvent(event);
-
+                if (data.data.CurrentSessionID) setSessionId(parseInt(data.data.CurrentSessionID));
                 notifyStatus('green');
-                return { status: 'success', data: data.data, dataChanged: dataChanged };
+                return { status: 'success', data: data.data };
             }
             notifyStatus('red');
             return { status: 'error', message: data.message };
@@ -314,8 +237,6 @@ const SYNC = window.SYNC = (function() {
         pullState,
         pushLogs,
         getPBForRepRange,
-        getHistory, 
-        getLastLog,
         registerStatusCallback,
         manualSync
     };
