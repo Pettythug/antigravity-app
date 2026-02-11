@@ -59,7 +59,7 @@ const POWER = window.POWER = (function() {
         // Fetch PB (Async Await to ensure it loads)
         // Note: New logic returns { weight, reps } or null
         const pb = await SYNC.getPBForRepRange(context.exerciseName); 
-        if(pb) {
+        if(pb && pb.weight) {
             document.getElementById('p-pb-disp').innerText = `PB: ${pb.weight} lbs x ${pb.reps}`;
         }
     }
