@@ -1,124 +1,106 @@
+var SPREADSHEET_ID = '1pFR03-TmhizQfIW6T0bBKXg7faKQ9s1AklEXhyEGDW0';
+
 function doGet(e) {
+  var lock = LockService.getScriptLock();
+  lock.tryLock(10000);
+  
   try {
-    const ss = SpreadsheetApp.openById("1pFR03-TmhizQfIW6T0bBKXg7faKQ9s1AklEXhyEGDW0");
-    const sheet = ss.getSheetByName("Logs");
-    const configSheet = ss.getSheetByName("Config");
+    var ss = SpreadsheetApp.openById(SPREADSHEET_ID);
+    var configSheet = ss.getSheetByName('Config');
     
-    let currentSessionId = 1;
-    if (configSheet) {
-      const lastRow = configSheet.getLastRow();
-      if (lastRow > 1) {
-        currentSessionId = configSheet.getRange(lastRow, 1).getValue();
+    // Create Config if missing
+    if (!configSheet) {
+      configSheet = ss.insertSheet('Config');
+      configSheet.appendRow(['Key', 'Value']);
+      configSheet.appendRow(['CurrentSessionID', '1']);
+    }
+    
+    // Read Session ID
+    var data = configSheet.getDataRange().getValues(); 
+    var sessionID = 1;
+    
+    for(var i=1; i<data.length; i++) {
+      if(data[i][0] === 'CurrentSessionID') {
+        sessionID = data[i][1];
+        break;
       }
     }
-
-    // Hydration: Fetch last 100 logs
-    let logs = [];
-    if (sheet) {
-      const lastRow = sheet.getLastRow();
-      
-      if (lastRow > 1) {
-        // v3.8 Fix: Ensure we don't go out of bounds if < 100 rows
-        const numRows = Math.min(lastRow - 1, 150); 
-        const startRow = lastRow - numRows + 1;
-        
-        // v3.8 Fix: Get Display Values to safely handle Dates? 
-        // No, getValues() is better for raw types, but we must handle Date objects in JSON.
-        const data = sheet.getRange(startRow, 1, numRows, 8).getValues();
-        
-        // Map to Object
-        logs = data.map((row, i) => {
-          // Normalize Timestamp
-          let ts = row[0];
-          if (ts instanceof Date) {
-            ts = ts.toISOString();
-          }
-
-          return {
-            id: "cloud_" + (startRow + i), 
-            timestamp: ts,
-            sessionId: row[1],
-            slot: row[2],
-            exercise: row[3],
-            weight: row[4],
-            reps: row[5],
-            rpe: row[6],
-            notes: row[7],
-            synced: 1
-          };
-        });
-      }
-    }
-
-    const result = {
-      status: "success",
-      data: {
-        CurrentSessionID: currentSessionId,
-        logs: logs
-      }
-    };
-
-    return ContentService.createTextOutput(JSON.stringify(result))
-      .setMimeType(ContentService.MimeType.JSON);
-
-  } catch (err) {
-    // v3.8 Debugging: Return error in JSON so client sees it
+    
     return ContentService.createTextOutput(JSON.stringify({
-      status: "error",
+      status: 'success',
+      data: {
+        CurrentSessionID: sessionID
+      }
+    })).setMimeType(ContentService.MimeType.JSON);
+    
+  } catch (err) {
+    return ContentService.createTextOutput(JSON.stringify({
+      status: 'error',
       message: err.toString()
     })).setMimeType(ContentService.MimeType.JSON);
+  } finally {
+    lock.releaseLock();
   }
 }
 
 function doPost(e) {
+  var lock = LockService.getScriptLock();
+  lock.tryLock(10000);
+  
   try {
-    const ss = SpreadsheetApp.openById("1pFR03-TmhizQfIW6T0bBKXg7faKQ9s1AklEXhyEGDW0");
-    const sheet = ss.getSheetByName("Logs");
-    const configSheet = ss.getSheetByName("Config");
+    var ss = SpreadsheetApp.openById(SPREADSHEET_ID);
+    var logsSheet = ss.getSheetByName('Logs');
+    var configSheet = ss.getSheetByName('Config');
     
-    const data = JSON.parse(e.postData.contents);
-    const logs = data.logs;
-    const updateSessionId = data.updateSessionId;
-
-    // Append Logs
-    if (logs && logs.length > 0) {
-      const rows = logs.map(l => [
-        l.timestamp,
-        l.sessionId,
-        l.slot,
-        l.exercise,
-        l.weight,
-        l.reps,
-        l.rpe,
-        l.notes
+    // Create Sheets if missing
+    if (!logsSheet) {
+      logsSheet = ss.insertSheet('Logs');
+      logsSheet.appendRow(['Timestamp', 'SessionID', 'Slot', 'Exercise', 'Weight', 'Reps', 'RPE', 'Notes', 'SyncedAt']);
+    }
+    if (!configSheet) {
+      configSheet = ss.insertSheet('Config');
+      configSheet.appendRow(['Key', 'Value']);
+      configSheet.appendRow(['CurrentSessionID', '1']);
+    }
+    
+    var postData = JSON.parse(e.postData.contents);
+    var logs = postData.logs || [];
+    var updateSessionId = postData.updateSessionId;
+    
+    // 1. Append Logs
+    var timestamp = new Date();
+    logs.forEach(function(log) {
+      logsSheet.appendRow([
+        log.timestamp,
+        log.sessionId,
+        log.slot,
+        log.exercise,
+        log.setNumber || 1, // v3.3 New Column
+        log.weight || '',
+        log.reps || '',
+        log.rpe || '',
+        log.notes || '',
+        timestamp
       ]);
-      sheet.getRange(sheet.getLastRow() + 1, 1, rows.length, rows[0].length).setValues(rows);
-    }
-
-    // Update Session ID
-    if (updateSessionId) {
-      configSheet.getRange(configSheet.getLastRow() + 1, 1).setValue(updateSessionId);
-    }
-
-    return ContentService.createTextOutput("Success");
-  } catch (err) {
-    return ContentService.createTextOutput("Error: " + err.toString());
-  }
-}
+    });
+    
+    // ...
 
 function setup() {
-  const ss = SpreadsheetApp.getActiveSpreadsheet();
+  var ss = SpreadsheetApp.openById(SPREADSHEET_ID);
   
-  let sheet = ss.getSheetByName("Logs");
-  if (!sheet) {
-    sheet = ss.insertSheet("Logs");
-    sheet.appendRow(["Timestamp", "SessionID", "Slot", "Exercise", "Weight", "Reps", "RPE", "Notes"]);
+  var logsSheet = ss.getSheetByName('Logs');
+  if (!logsSheet) {
+    logsSheet = ss.insertSheet('Logs');
+    logsSheet.appendRow(['Timestamp', 'SessionID', 'Slot', 'Exercise', 'SetNumber', 'Weight', 'Reps', 'RPE', 'Notes', 'SyncedAt']);
+    logsSheet.setFrozenRows(1);
   }
   
-  let config = ss.getSheetByName("Config");
-  if (!config) {
-    config = ss.insertSheet("Config");
-    config.appendRow(["CurrentSessionID"]);
-    config.appendRow([1]);
+  var configSheet = ss.getSheetByName('Config');
+  if (!configSheet) {
+    configSheet = ss.insertSheet('Config');
+    configSheet.appendRow(['Key', 'Value']);
+    configSheet.appendRow(['CurrentSessionID', '1']);
+    configSheet.setFrozenRows(1);
   }
 }
