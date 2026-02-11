@@ -5,7 +5,7 @@
  */
 
 const POWER = window.POWER = (function() {
-    console.log("POWER Module Loaded (v3.7.1)");
+    console.log("POWER Module Loaded (v3.7.2-PB-FIX)");
     
     let context = {};
     let rowCount = 3;
@@ -48,10 +48,12 @@ const POWER = window.POWER = (function() {
             renderRow(i, target);
         }
 
-        // Fetch PB
-        const pb = await SYNC.getPBForRepRange(context.exerciseName, target);
+        // Fetch PB (v3.7.2 Update: Await, handle null)
+        const pb = await SYNC.getPBForRepRange(context.exerciseName);
         if(pb) {
             document.getElementById('p-pb-disp').innerText = `PB: ${pb} lbs`;
+        } else {
+             document.getElementById('p-pb-disp').innerText = "PB: --";
         }
     }
 

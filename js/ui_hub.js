@@ -4,7 +4,7 @@
  */
 
 const HUB = (function() {
-    console.log("HUB Module Loaded (v3.7.1)");
+    console.log("HUB Module Loaded (v3.7.2-PB-FIX)");
 
     let currentSession = null;
     let completedSlots = new Set(); 

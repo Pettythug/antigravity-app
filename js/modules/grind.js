@@ -5,7 +5,7 @@
  */
 
 const GRIND = window.GRIND = (function() {
-    console.log("GRIND Module Loaded (v3.7.1)");
+    console.log("GRIND Module Loaded (v3.7.2-PB-FIX)");
 
     let context = {};
     let rowCount = 3;
@@ -48,10 +48,12 @@ const GRIND = window.GRIND = (function() {
             renderRow(i);
         }
 
-        // Fetch PB
-        const pb = await SYNC.getPBForRepRange(context.exerciseName, cleanTarget);
+        // Fetch PB (v3.7.2 Update: Await, handle null)
+        const pb = await SYNC.getPBForRepRange(context.exerciseName);
         if(pb) {
-            document.getElementById('g-pb-disp').innerText = `PB (${cleanTarget}): ${pb} lbs`;
+            document.getElementById('g-pb-disp').innerText = `PB: ${pb} lbs`;
+        } else {
+            document.getElementById('g-pb-disp').innerText = "PB: --";
         }
     }
 

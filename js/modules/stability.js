@@ -11,7 +11,7 @@
  */
 
 const STABILITY = window.STABILITY = (function() {
-    console.log("STABILITY Module Loaded (v3.7.1)");
+    console.log("STABILITY Module Loaded (v3.7.2-PB-FIX)");
     
     let context = {};
     let rowCount = 3;

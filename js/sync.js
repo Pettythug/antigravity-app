@@ -4,7 +4,7 @@
  */
 
 const SYNC = window.SYNC = (function() {
-    console.log("SYNC Module Loaded (v3.7.1)");
+    console.log("SYNC Module Loaded (v3.7.2-PB-FIX)");
 
     // --- 1. LOCAL STORAGE DATABASE ---
     const KEY_LOGS = 'AG_LOGS';
@@ -93,19 +93,29 @@ const SYNC = window.SYNC = (function() {
          return getLocalLogs().filter(l => l.sessionId == sessionId);
     }
     
-    // v3.0 PB Logic adapted for Array
-    async function getPBForRepRange(exerciseName, targetReps) {
-        const logs = getLocalLogs();
-        let minReps = parseInt(targetReps);
-        if(isNaN(minReps)) minReps = 1;
+    // v3.7.2 PB FIX: Fuzzy Search + Absolute Max Weight (No Rep Lock)
+    async function getPBForRepRange(exerciseName) {
+        // v3.7.2 Logic: Direct LocalStorage Access for speed
+        const logs = JSON.parse(localStorage.getItem('AG_LOGS') || '[]');
+        if (logs.length === 0) return null;
 
-        // Filter by exercise and Reps
-        const matches = logs.filter(l => l.exercise === exerciseName && l.reps >= minReps);
+        const searchName = exerciseName.toLowerCase().trim();
+
+        // FUZZY SEARCH
+        const matches = logs.filter(l => 
+            l.exercise && 
+            (l.exercise.toLowerCase().trim().includes(searchName) || searchName.includes(l.exercise.toLowerCase().trim())) &&
+            parseFloat(l.weight) > 0
+        );
+
         if (matches.length === 0) return null;
 
-        // Find Max Weight
-        const maxWeight = matches.reduce((max, l) => Math.max(max, parseFloat(l.weight) || 0), 0);
-        return maxWeight > 0 ? maxWeight : null;
+        // SORT: Heaviest first
+        matches.sort((a, b) => parseFloat(b.weight) - parseFloat(a.weight));
+
+        const best = matches[0];
+        // RETURN: Simple value
+        return best.weight; 
     }
 
     // --- 3. STORAGE & SYNC (Shared) ---
