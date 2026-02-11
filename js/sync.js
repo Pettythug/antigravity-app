@@ -99,9 +99,9 @@ const SYNC = window.SYNC = (function() {
         
         const searchName = exerciseName.toLowerCase().trim();
         
-        // Find all matches for this exercise
+        // Find all matches for this exercise (Fuzzy Match)
         const matches = logs.filter(l => 
-            l.exercise && l.exercise.toLowerCase().trim() === searchName &&
+            l.exercise && l.exercise.toLowerCase().trim().includes(searchName) &&
             parseFloat(l.weight) > 0
         );
         
@@ -220,16 +220,15 @@ const SYNC = window.SYNC = (function() {
                     }
                 }
 
-                if (dataChanged) {
-                    console.log("State Updated. Dispatching Event...");
-                    const event = new CustomEvent('ag-state-updated', { 
-                        detail: { 
-                            sessionId: getSessionId(), // Current ID (Updated)
-                            logsCount: localLogs.length // Current Log Count
-                        } 
-                    });
-                    window.dispatchEvent(event);
-                }
+                // v3.8 Fix: Always dispatch event to ensure Hub hydrates/refreshes
+                console.log("State Sync Complete. Dispatching Event...");
+                const event = new CustomEvent('ag-state-updated', { 
+                    detail: { 
+                        sessionId: getSessionId(), 
+                        logsCount: getLocalLogs().length 
+                    } 
+                });
+                window.dispatchEvent(event);
 
                 notifyStatus('green');
                 return { status: 'success', data: data.data, dataChanged: dataChanged };

@@ -63,10 +63,10 @@ const GRIND = window.GRIND = (function() {
             renderRow(i, ghost.weight, ghost.reps);
         }
 
-        // Fetch PB (Async Await)
-        const pb = await SYNC.getPBForRepRange(context.exerciseName);
+        // Fetch PB
+        const pb = await SYNC.getPBForRepRange(context.exerciseName, cleanTarget);
         if(pb) {
-            document.getElementById('g-pb-disp').innerText = `PB: ${pb.weight} lbs x ${pb.reps}`;
+            document.getElementById('g-pb-disp').innerText = `PB (${cleanTarget}RM): ${pb} lbs`;
         }
     }
 
