@@ -5,7 +5,7 @@
  */
 
 const GRIND = window.GRIND = (function() {
-    console.log("GRIND Module Loaded (v3.7.2-PB-FIX)");
+    console.log("GRIND Module Loaded (v3.7.3)");
 
     let context = {};
     let rowCount = 3;
