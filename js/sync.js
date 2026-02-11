@@ -92,45 +92,30 @@ const SYNC = window.SYNC = (function() {
          return getLocalLogs().filter(l => l.sessionId == sessionId);
     }
     
-    // v3.0 PB Logic adapted for Array
-    async function getPBForRepRange(exerciseName, targetReps) {
+    // v3.8 PB Logic (User Provided Optimized)
+    async function getPBForRepRange(exerciseName) {
         const logs = getLocalLogs();
+        if (logs.length === 0) return null;
         
-        // 1. Parse Range (e.g. "4-6" -> 4)
-        let minReps = 1;
-        if (typeof targetReps === 'string' && targetReps.includes('-')) {
-            minReps = parseInt(targetReps.split('-')[0]);
-        } else {
-            minReps = parseInt(targetReps);
-        }
-        if(isNaN(minReps)) minReps = 1;
-
-        const cleanName = exerciseName.trim().toLowerCase();
-
-        // 2. Filter by exercise and Reps >= minReps
-        const matches = logs.filter(l => {
-            if (!l.exercise) return false;
-            return l.exercise.trim().toLowerCase() === cleanName && parseFloat(l.reps) >= minReps;
-        });
-
+        const searchName = exerciseName.toLowerCase().trim();
+        
+        // Find all matches for this exercise
+        const matches = logs.filter(l => 
+            l.exercise && l.exercise.toLowerCase().trim() === searchName &&
+            parseFloat(l.weight) > 0
+        );
+        
         if (matches.length === 0) return null;
-
-        // 3. Find Max Weight (Tie-break with Reps)
-        // Sort distinct sets by Weight DESC, then Reps DESC
-        matches.sort((a, b) => {
-            const wA = parseFloat(a.weight) || 0;
-            const wB = parseFloat(b.weight) || 0;
-            if (wA !== wB) return wB - wA; // Higher weight first
-            
-            const rA = parseFloat(a.reps) || 0;
-            const rB = parseFloat(b.reps) || 0;
-            return rB - rA; // Higher reps first
-        });
-
-        const best = matches[0];
-        const bestWeight = parseFloat(best.weight) || 0;
         
-        return bestWeight > 0 ? bestWeight : null;
+        // Sort by weight descending, then reps descending
+        matches.sort((a, b) => {
+            const weightDiff = parseFloat(b.weight) - parseFloat(a.weight);
+            if (weightDiff !== 0) return weightDiff;
+            return parseInt(b.reps) - parseInt(a.reps);
+        });
+        
+        const best = matches[0];
+        return { weight: best.weight, reps: best.reps };
     }
 
     // v3.8: Ghost Values / History
