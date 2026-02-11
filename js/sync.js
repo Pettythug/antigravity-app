@@ -142,7 +142,7 @@ const SYNC = window.SYNC = (function() {
     // CONFIG & API Bridge
     // CONFIG & API Bridge
     // v3.7 Hardcoded URL (Recovered from v2.8)
-    const SCRIPT_URL = "https://script.google.com/macros/s/AKfycbxMPwwjgHMIjl6UkdjZNuCqsSCPIw8PpD7ZJ-bkeWZSkedjL3MlKoL_fu9rGWH-VFE_1Q/exec";
+    const SCRIPT_URL = "https://script.google.com/macros/s/AKfycbzn6Ms8ytLI7YLKPfMvoFP-rhv-QpV7rSimBfWTYUrg3WarcDS89Ht4wVRVq3y59cIgoA/exec";
     
     let onSyncStatus = null;
     function registerStatusCallback(cb) { onSyncStatus = cb; }
