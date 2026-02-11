@@ -4,6 +4,7 @@
  */
 
 const SYNC = window.SYNC = (function() {
+    console.log("SYNC Module Loaded (v3.7.1)");
 
     // --- 1. LOCAL STORAGE DATABASE ---
     const KEY_LOGS = 'AG_LOGS';

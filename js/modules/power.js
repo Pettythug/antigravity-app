@@ -5,6 +5,7 @@
  */
 
 const POWER = window.POWER = (function() {
+    console.log("POWER Module Loaded (v3.7.1)");
     
     let context = {};
     let rowCount = 3;

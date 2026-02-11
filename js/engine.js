@@ -4,6 +4,7 @@
  */
 
 const ENGINE = (function() {
+    console.log("ENGINE Module Loaded (v3.7.1)");
 
     // --- 1. CONFIGURATION & CONSTANTS ---
     const CONSTANTS = {
