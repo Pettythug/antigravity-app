@@ -136,7 +136,7 @@ const HUB = (function() {
             <div id="dashboard-view">
                 <header class="hub-header">
                     <div>
-                        <div style="font-size: 0.75rem; color: var(--primary); margin-bottom: 4px; letter-spacing: 1px; font-weight: bold;">ANTIGRAVITY v3.7.4</div>
+                        <div style="font-size: 0.75rem; color: var(--primary); margin-bottom: 4px; letter-spacing: 1px; font-weight: bold;">ANTIGRAVITY v3.7.5</div>
                         <h1 style="font-size: 1.2rem;">SESSION ${currentSession.id}</h1>
                         <span class="badge">${currentSession.waveInfo.Name}</span>
                         <span class="badge secondary">${currentSession.isA ? 'Pull/Hinge' : 'Push/Squat'}</span>
@@ -156,7 +156,7 @@ const HUB = (function() {
                     </div>
                     <!-- v3.7.3 Hard Reset -->
                     <div style="margin-top:12px; font-size: 0.7rem; text-align: center; color: #999;">
-                        v3.7.4 &bull; <span style="text-decoration: underline; cursor: pointer;" onclick="HUB.hardReset()">Reset App</span>
+                        v3.7.5 &bull; <span style="text-decoration: underline; cursor: pointer;" onclick="HUB.hardReset()">Reset App</span>
                     </div>
                 </div>
             </div>
@@ -247,7 +247,7 @@ const HUB = (function() {
     
     async function finishSession() {
         if(confirm("Advance to next Session?")) {
-            // v2.6: Clean up the Snapshot for this session
+            // v2.6: Clean up the Snapshot for this session (Critical: Before Reload)
             const KEY = `AG_SNAPSHOT_${currentSession.id}`;
             localStorage.removeItem(KEY);
 
@@ -260,14 +260,22 @@ const HUB = (function() {
                 btn.disabled = true;
             }
 
-            // 1. Update Local (Triggering Timestamp)
+            // 1. Update Local
             SYNC.setSessionId(nextId);
 
-            // 2. Force Push (Critical Path)
-            await SYNC.pushLogs(); // This sends the NEW SessionID because getPending includes it
-
-            // 3. Reload (Now server should be caught up, or LocalMastery will ignore it)
-            location.reload();
+            // 2. Force Push with Timeout (v3.7.5 Fix)
+            try {
+                // Race: Push vs 4s Timeout
+                const saveTask = SYNC.pushLogs();
+                const timeoutTask = new Promise(resolve => setTimeout(resolve, 4000));
+                
+                await Promise.race([saveTask, timeoutTask]);
+            } catch (e) {
+                console.warn("Save interrupted or failed:", e);
+            } finally {
+                // 3. Reload ALWAYS
+                location.reload();
+            }
         }
     }
 

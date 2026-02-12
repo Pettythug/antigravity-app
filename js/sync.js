@@ -223,53 +223,50 @@ const SYNC = window.SYNC = (function() {
     let isPushing = false;
 
     async function pushLogs() {
-        if (isPushing) return; // Prevent double-fire
+        if (isPushing) return false; // Prevent double-fire
         isPushing = true;
 
-        const pending = getPendingLogs();
-        if (pending.length === 0) { 
-            notifyStatus('green'); 
-            isPushing = false;
-            return; 
-        }
+        try {
+            const pending = getPendingLogs();
+            if (pending.length === 0) { 
+                notifyStatus('green'); 
+                return true; 
+            }
 
-        const config = getConfig();
-        if (!config.apiUrl) { 
-            notifyStatus('red'); 
-            console.log("Sync Skipped: No API URL");
-            isPushing = false;
-            return; 
-        }
-        
-        notifyStatus('yellow');
+            const config = getConfig();
+            if (!config.apiUrl) { 
+                notifyStatus('red'); 
+                console.log("Sync Skipped: No API URL");
+                return false; 
+            }
+            
+            notifyStatus('yellow');
 
-        // v3.7.1: Optimistic Locking
-        // Mark as synced IMMEDIATELY to prevent double-sends
-        const ids = pending.map(l => l.id); 
-        markSynced(ids);
+            // v3.7.1: Optimistic Locking
+            const ids = pending.map(l => l.id); 
+            markSynced(ids);
 
-        const payload = { logs: pending, updateSessionId: getSessionId() };
-        
-        // Fetch with CORS (Audit Fix)
-        fetch(config.apiUrl, {
-            method: 'POST', mode: 'cors', credentials: 'omit',
-            headers: { 'Content-Type': 'text/plain' },
-            body: JSON.stringify(payload)
-        })
-        .then(res => res.text()) // Consume body to ensure completion
-        .then(txt => {
+            const payload = { logs: pending, updateSessionId: getSessionId() };
+            
+            // v3.7.5: Async/Await with boolean return
+            const res = await fetch(config.apiUrl, {
+                method: 'POST', mode: 'cors', credentials: 'omit',
+                headers: { 'Content-Type': 'text/plain' },
+                body: JSON.stringify(payload)
+            });
+            
+            const txt = await res.text();
             console.log("Background Push Success:", txt);
             notifyStatus('green');
-        })
-        .catch(e => {
+            return true;
+
+        } catch (e) {
             console.log("Background Push Warning (Silent)", e);
-            // We optimized to "Synced". If it failed, data is technically dirty on server, 
-            // but user prefers NO DUPLICATES over retry loops.
             notifyStatus('red'); 
-        })
-        .finally(() => {
+            return false;
+        } finally {
             isPushing = false;
-        });
+        }
     }
 
     async function manualSync() {
