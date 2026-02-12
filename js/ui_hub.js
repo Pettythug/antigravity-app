@@ -124,7 +124,7 @@ const HUB = (function() {
             <div id="dashboard-view">
                 <header class="hub-header">
                     <div>
-                        <div style="font-size: 0.75rem; color: var(--primary); margin-bottom: 4px; letter-spacing: 1px; font-weight: bold;">ANTIGRAVITY v3.8</div>
+                        <div style="font-size: 0.75rem; color: var(--primary); margin-bottom: 4px; letter-spacing: 1px; font-weight: bold;">ANTIGRAVITY v3.8.1</div>
                         <h1 style="font-size: 1.2rem;">SESSION ${currentSession.id}</h1>
                         <span class="badge">${currentSession.waveInfo.Name}</span>
                         <span class="badge secondary">${currentSession.isA ? 'Pull/Hinge' : 'Push/Squat'}</span>
@@ -140,7 +140,7 @@ const HUB = (function() {
                     <button class="btn btn-secondary" onclick="HUB.finishSession()">Complete Session</button>
                     <!-- v2.8 Manual Sync -->
                     <div style="margin-top:16px; font-size: 0.9rem; text-align: center;">
-                        v3.8 &bull; <span style="text-decoration: underline; cursor: pointer;" onclick="HUB.hardReset()">Reset App</span>
+                        v3.8.1 &bull; <span style="text-decoration: underline; cursor: pointer;" onclick="HUB.hardReset()">Reset App</span>
                     </div>
                     <div style="margin-top:10px; font-size: 0.7rem; text-align: center; color: #666;">
                         v3.2 SQLite Engine

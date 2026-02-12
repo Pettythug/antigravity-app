@@ -93,29 +93,18 @@ const SYNC = window.SYNC = (function() {
     }
     
     // v3.0 PB Logic adapted for Array
-    // v3.8 PB FIX: Search lightweight server logs
-    async function getPBForRepRange(exerciseName) {
-        // v3.8: Read from SERVER LOGS (Populated by pullState)
-        const logs = JSON.parse(localStorage.getItem('AG_SERVER_LOGS') || '[]');
-        if (logs.length === 0) return null;
+    async function getPBForRepRange(exerciseName, targetReps) {
+        const logs = getLocalLogs();
+        let minReps = parseInt(targetReps);
+        if(isNaN(minReps)) minReps = 1;
 
-        const searchName = exerciseName.toLowerCase().trim();
-
-        // FUZZY SEARCH
-        const matches = logs.filter(l => 
-            l.exercise && 
-            (l.exercise.toLowerCase().trim().includes(searchName) || searchName.includes(l.exercise.toLowerCase().trim())) &&
-            parseFloat(l.weight) > 0
-        );
-
+        // Filter by exercise and Reps
+        const matches = logs.filter(l => l.exercise === exerciseName && l.reps >= minReps);
         if (matches.length === 0) return null;
 
-        // SORT: Heaviest first
-        matches.sort((a, b) => parseFloat(b.weight) - parseFloat(a.weight));
-
-        const best = matches[0];
-        // RETURN: Simple value
-        return best.weight; 
+        // Find Max Weight
+        const maxWeight = matches.reduce((max, l) => Math.max(max, parseFloat(l.weight) || 0), 0);
+        return maxWeight > 0 ? maxWeight : null;
     }
 
     // --- 3. STORAGE & SYNC (Shared) ---
@@ -139,7 +128,7 @@ const SYNC = window.SYNC = (function() {
     // CONFIG & API Bridge
     // CONFIG & API Bridge
     // v3.7 Hardcoded URL (Recovered from v2.8)
-    const SCRIPT_URL = "https://script.google.com/macros/s/AKfycbxMPwwjgHMIjl6UkdjZNuCqsSCPIw8PpD7ZJ-bkeWZSkedjL3MlKoL_fu9rGWH-VFE_1Q/exec";
+    const SCRIPT_URL = "https://script.google.com/macros/s/AKfycbxSQFu09yKZoargX3Db7sVcS038IvJpC7U-Wx4PyV-9706WibuA22rowWocrgJUqdU5jg/exec";
     
     let onSyncStatus = null;
     function registerStatusCallback(cb) { onSyncStatus = cb; }
@@ -163,14 +152,7 @@ const SYNC = window.SYNC = (function() {
             const res = await fetch(config.apiUrl, { method: 'GET', mode: 'cors', credentials: 'omit' });
             const data = await res.json();
              if (data.status === 'success') {
-                const serverId = parseInt(data.data.CurrentSessionID);
-                if (serverId) setSessionId(serverId);
-                
-                // v3.8: Store lightweight logs for PB calculation
-                if (data.data.logs) {
-                    localStorage.setItem('AG_SERVER_LOGS', JSON.stringify(data.data.logs));
-                }
-
+                if (data.data.CurrentSessionID) setSessionId(parseInt(data.data.CurrentSessionID));
                 notifyStatus('green');
                 return { status: 'success', data: data.data };
             }
@@ -184,44 +166,50 @@ const SYNC = window.SYNC = (function() {
 
     let isPushing = false;
 
-    // v3.8 Strict Spec
-    function pushLogs() {
-        if (isPushing) return Promise.resolve(false); 
+    async function pushLogs() {
+        if (isPushing) return; // Prevent double-fire
         isPushing = true;
-        notifyStatus('yellow');
 
         const pending = getPendingLogs();
-        const config = getConfig();
-        
-        if (pending.length === 0 && !config.apiUrl) {
-             isPushing = false;
-             return Promise.resolve(true); 
+        if (pending.length === 0) { 
+            notifyStatus('green'); 
+            isPushing = false;
+            return; 
         }
 
+        const config = getConfig();
+        if (!config.apiUrl) { 
+            notifyStatus('red'); 
+            console.log("Sync Skipped: No API URL");
+            isPushing = false;
+            return; 
+        }
+        
+        notifyStatus('yellow');
+
+        // v3.7.1: Optimistic Locking
+        // Mark as synced IMMEDIATELY to prevent double-sends
         const ids = pending.map(l => l.id); 
         markSynced(ids);
 
-        const payload = { 
-            logs: pending, 
-            updateSessionId: getSessionId() 
-        };
+        const payload = { logs: pending, updateSessionId: getSessionId() };
         
-        // CRITICAL: Return the fetch promise
-        return fetch(config.apiUrl, {
+        // Fetch with CORS (Audit Fix)
+        fetch(config.apiUrl, {
             method: 'POST', mode: 'cors', credentials: 'omit',
             headers: { 'Content-Type': 'text/plain' },
             body: JSON.stringify(payload)
         })
-        .then(res => res.text())
+        .then(res => res.text()) // Consume body to ensure completion
         .then(txt => {
-            console.log("Push Success:", txt);
+            console.log("Background Push Success:", txt);
             notifyStatus('green');
-            return true;
         })
         .catch(e => {
-            console.warn("Push Warning:", e);
-            notifyStatus('red');
-            return false;
+            console.log("Background Push Warning (Silent)", e);
+            // We optimized to "Synced". If it failed, data is technically dirty on server, 
+            // but user prefers NO DUPLICATES over retry loops.
+            notifyStatus('red'); 
         })
         .finally(() => {
             isPushing = false;
