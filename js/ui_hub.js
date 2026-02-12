@@ -8,7 +8,7 @@ const HUB = (function() {
     let currentSession = null;
     let completedSlots = new Set(); 
     let exerciseSnapshot = {}; // v2.6 Lockdown
-    let isSyncing = false; // Global Sync Lock
+    let isProcessing = false; // Global Sync Lock
 
     async function init() {
         try {
@@ -146,7 +146,7 @@ const HUB = (function() {
                 </div>
 
                 <div class="hub-footer">
-                    <button class="btn btn-secondary" onclick="HUB.finishSession()">Complete Session</button>
+                    <button id="btn-complete-session" class="btn btn-secondary" onclick="HUB.finishSession()">Complete Session</button>
                     <!-- v2.8 Manual Sync -->
                     <div style="margin-top:16px; font-size: 0.9rem; text-align: center;">
                         v3.8.5 &bull; <span style="text-decoration: underline; cursor: pointer;" onclick="HUB.hardReset()">Reset App</span>
@@ -219,8 +219,13 @@ const HUB = (function() {
                 exerciseName: exerciseName,
                 waveInfo: currentSession.waveInfo,
                 onFinish: async (logData) => {
-                    if (isSyncing) return;
-                    isSyncing = true;
+                    if (isProcessing) return;
+                    isProcessing = true;
+                    
+                    // Lockout UI
+                    const btn = document.getElementById('btn-complete-session');
+                    if(btn) btn.disabled = true;
+
                     try {
                         await SYNC.addLog(logData);
                         
@@ -232,7 +237,8 @@ const HUB = (function() {
                         
                         returnToHub();
                     } finally {
-                        isSyncing = false;
+                        isProcessing = false;
+                        if(btn) btn.disabled = false;
                     }
                 },
                 onCancel: () => {
@@ -251,12 +257,12 @@ const HUB = (function() {
     }
     
     async function finishSession() {
-        if (isSyncing) return;
+        if (isProcessing) return;
         if (!confirm("Advance to next Session?")) return;
         
-        isSyncing = true;
+        isProcessing = true;
     
-        const btn = document.querySelector('.hub-footer .btn');
+        const btn = document.getElementById('btn-complete-session');
         if(btn) {
              btn.innerText = "Syncing...";
              btn.style.opacity = "0.5";
@@ -281,7 +287,7 @@ const HUB = (function() {
         } catch (e) {
             console.warn("Sync failed or timed out, but advancing anyway.", e);
         } finally {
-            isSyncing = false;
+            isProcessing = false;
             // 4. Clean up snapshot and refresh
             const KEY = `AG_SNAPSHOT_${currentSession.id}`;
             localStorage.removeItem(KEY);
