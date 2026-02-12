@@ -1,5 +1,5 @@
 /**
- * ANTIGRAVITY v3.8.4.1 - CORE ENGINE
+ * ANTIGRAVITY v3.8.5 - CORE ENGINE
  * Handles: Wave Logic, Primers, Odometer Math, Exercise Arrays
  */
 

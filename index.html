@@ -1,34 +1,38 @@
-<!DOCTYPE html>
+<!doctype html>
 <html lang="en">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>Antigravity v3.8.4 (PROD)</title>
-    <link rel="stylesheet" href="css/main.css">
-    <link rel="manifest" href="manifest.json">
+  <head>
+    <meta charset="UTF-8" />
+    <meta
+      name="viewport"
+      content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no"
+    />
+    <title>Antigravity v3.8.5 (PROD)</title>
+    <link rel="stylesheet" href="css/main.css" />
+    <link rel="manifest" href="manifest.json" />
     <script>
-        if ('serviceWorker' in navigator) {
-            window.addEventListener('load', () => {
-                navigator.serviceWorker.register('service-worker.js')
-                .then(registration => {
-                    console.log('SW Registered: ', registration.scope);
-                }, err => {
-                    console.log('SW Registration Failed: ', err);
-                });
-            });
-        }
+      if ("serviceWorker" in navigator) {
+        window.addEventListener("load", () => {
+          navigator.serviceWorker.register("service-worker.js").then(
+            (registration) => {
+              console.log("SW Registered: ", registration.scope);
+            },
+            (err) => {
+              console.log("SW Registration Failed: ", err);
+            },
+          );
+        });
+      }
     </script>
-</head>
-<body>
-
+  </head>
+  <body>
     <main id="app-container">
-        <!-- Hub Injected Here -->
+      <!-- Hub Injected Here -->
     </main>
 
     <!-- CORE DEPENDENCIES -->
     <script src="js/engine.js"></script>
     <script src="js/sync.js"></script>
-    
+
     <!-- MODULES (Static Load) -->
     <script src="modules/power.js"></script>
     <script src="modules/grind.js"></script>
@@ -37,6 +41,5 @@
 
     <!-- HUB CONTROLLER -->
     <script src="js/ui_hub.js"></script>
-
-</body>
+  </body>
 </html>
