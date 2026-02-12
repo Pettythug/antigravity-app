@@ -1,5 +1,5 @@
 /**
- * ANTIGRAVITY v3.8.2 - SYNC CORE
+ * ANTIGRAVITY v3.8.4 - SYNC CORE
  * Fixed: Synchronous Handshake & Validated 9-Column Payload
  */
 

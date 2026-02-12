@@ -1,5 +1,5 @@
 /**
- * ANTIGRAVITY v2.1 - CORE ENGINE
+ * ANTIGRAVITY v3.8.4.1 - CORE ENGINE
  * Handles: Wave Logic, Primers, Odometer Math, Exercise Arrays
  */
 
@@ -46,20 +46,24 @@ const ENGINE = (function() {
 
     function getSessionInfo(sessionId) {
         const id = parseInt(sessionId) || 1;
+        // 1. Math Fix: Wave is a property of the Session, not the definition of it.
+        // Formula: ((id - 1) % 4) + 1  => 1, 2, 3, 4, 1, 2...
         const wave = ((id - 1) % 4) + 1;
         const waveInfo = CONSTANTS.WAVE[wave];
-        const isOdd = id % 2 !== 0; // Odd = A, Even = B
+
+        // 2. Label Fix: Odd = A (Push/Squat), Even = B (Pull/Hinge)
+        const isOdd = id % 2 !== 0; 
         
-        // Fix Labels to match A=Push/Squat, B=Pull/Hinge
+        // Explicit Labeling based on user directive
         const type = isOdd ? "Workout A (Push/Squat)" : "Workout B (Pull/Hinge)";
         const plan = isOdd ? CONSTANTS.WORKOUT_A_STRUCTURE : CONSTANTS.WORKOUT_B_STRUCTURE;
         
         return {
-            id,
-            wave,
-            waveInfo,
-            type,
-            plan, // Array of slots e.g. ["1B", "3"...]
+            id: id,            // Display: "SESSION 9"
+            wave: wave,        // Logic: 1 (Endurance)
+            waveInfo: waveInfo,
+            type: type,
+            plan: plan, 
             isA: isOdd
         };
     }

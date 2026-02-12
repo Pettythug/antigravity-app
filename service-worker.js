@@ -1,4 +1,4 @@
-const CACHE_NAME = 'antigravity-v3.8-hydration';
+const CACHE_NAME = 'antigravity-v3.8.4-final';
 const urlsToCache = [
   './',
   './index.html',
@@ -6,10 +6,10 @@ const urlsToCache = [
   './js/engine.js',
   './js/sync.js',
   './js/ui_hub.js',
-  './js/modules/power.js',
-  './js/modules/grind.js',
-  './js/modules/stability.js',
-  './js/modules/engine.js'
+  './modules/power.js',
+  './modules/grind.js',
+  './modules/stability.js',
+  './modules/engine_mod.js'
 ];
 
 self.addEventListener('install', event => {
