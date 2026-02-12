@@ -9,7 +9,7 @@ const SYNC = window.SYNC = (function() {
     const KEY_SESSION = 'AG_SESSION_ID';
     const KEY_CONFIG = 'AG_CONFIG';
     // NEW DEPLOYMENT URL
-    const SCRIPT_URL = "https://script.google.com/macros/s/AKfycbzjzb0F8bixnlvSXhZMYNgi17_TA2gTZYogT-kCa78Ni71-C6rVjtG4m9RM6PplTzyMZA/exec";
+    const SCRIPT_URL = 'https://script.google.com/macros/s/AKfycbzjzb0F8bixnlvSXhZMYNgi17_TA2gTZYogT-kCa78Ni71-C6rVjtG4m9RM6PplTzyMZA/exec';
 
     function initDB() { console.log("Sync Engine v3.8.4.1 Ready."); }
 
