@@ -1,244 +1,149 @@
 /**
- * ANTIGRAVITY v3.7 - CLEAN CORE (LocalStorage)
- * Handles: LocalStorage Data, Async Google Sheets Sync
+ * ANTIGRAVITY v3.8.2 - SYNC CORE
+ * Fixed: Synchronous Handshake & Validated 9-Column Payload
  */
 
 const SYNC = window.SYNC = (function() {
 
-    // --- 1. LOCAL STORAGE DATABASE ---
     const KEY_LOGS = 'AG_LOGS';
-    
-    // --- 1. LOCAL STORAGE DATABASE ---
-    // KEY_LOGS declared above implies the log storage key
+    const KEY_SESSION = 'AG_SESSION_ID';
+    const KEY_CONFIG = 'AG_CONFIG';
+    // NEW DEPLOYMENT URL
+    const SCRIPT_URL = "https://script.google.com/macros/s/AKfycbzjzb0F8bixnlvSXhZMYNgi17_TA2gTZYogT-kCa78Ni71-C6rVjtG4m9RM6PplTzyMZA/exec";
 
-    async function initDB() {
-        console.log("Storage Ready (LocalStorage).");
-    }
-
-    // --- 2. LOGIC (LocalStorage) ---
+    function initDB() { console.log("Sync Engine v3.8.2 Ready."); }
 
     function getLocalLogs() {
-        try {
-            return JSON.parse(localStorage.getItem(KEY_LOGS)) || [];
-        } catch { return []; }
+        try { return JSON.parse(localStorage.getItem(KEY_LOGS)) || []; } catch { return []; }
     }
 
-    function saveLocalLogs(logs) {
-        localStorage.setItem(KEY_LOGS, JSON.stringify(logs));
+    function saveLocalLogs(logs) { localStorage.setItem(KEY_LOGS, JSON.stringify(logs)); }
+
+    function getSessionId() { return parseInt(localStorage.getItem(KEY_SESSION)) || 1; }
+    function setSessionId(id) { localStorage.setItem(KEY_SESSION, id); }
+
+    function markSynced(ids) {
+        const logs = getLocalLogs();
+        const updated = logs.map(l => {
+            if (ids.includes(l.id)) return { ...l, synced: 1 };
+            return l;
+        });
+        saveLocalLogs(updated);
     }
 
     async function addLog(logData) {
         const logs = getLocalLogs();
-        const sets = logData.sets || [];
-        const note = logData.notes || "";
         const timestamp = new Date().toISOString();
-        
-        let newEntries = [];
+        const sets = logData.sets || [{ weight: 0, reps: 1, rpe: 0 }]; // Fallback for Engine/Stability
 
-        if (sets.length === 0) {
-             newEntries.push({
-                id: Date.now(), // Simple ID
-                timestamp: timestamp,
-                sessionId: logData.sessionId,
-                slot: logData.slot,
-                exercise: logData.exercise,
-                setNumber: 1,
-                weight: 0,
-                reps: 0,
-                rpe: 0,
-                notes: note,
-                synced: 0
-             });
-        } else {
-            sets.forEach((set, index) => {
-                newEntries.push({
-                    id: Date.now() + index,
-                    timestamp: timestamp,
-                    sessionId: logData.sessionId,
-                    slot: logData.slot,
-                    exercise: logData.exercise,
-                    setNumber: index + 1,
-                    weight: set.weight,
-                    reps: set.reps,
-                    rpe: set.rpe,
-                    notes: note,
-                    synced: 0
-                });
-            });
-        }
+        const newEntries = sets.map((set, i) => ({
+            id: Date.now() + i,
+            timestamp: timestamp,
+            sessionId: logData.sessionId,
+            slot: logData.slot,
+            exercise: logData.exercise,
+            weight: set.weight,
+            reps: set.reps,
+            rpe: set.rpe,
+            notes: logData.notes || "",
+            synced: 0
+        }));
 
-        const updated = logs.concat(newEntries);
-        saveLocalLogs(updated);
-
-        console.log("Local Saved (LS). Triggering Background Push...");
-        setTimeout(() => pushLogs(), 100);
-        
+        saveLocalLogs(logs.concat(newEntries));
+        // Trigger background push but don't wait for it here
+        pushLogs(); 
         return true;
     }
 
-    function getPendingLogs() {
-        return getLocalLogs().filter(l => l.synced === 0);
-    }
+    async function pushLogs() {
+        const pending = getLocalLogs().filter(l => l.synced === 0);
+        if (pending.length === 0) return Promise.resolve("No pending data");
 
-    function markSynced(ids) {
-        const logs = getLocalLogs();
-        logs.forEach(l => {
-            if (ids.includes(l.id)) l.synced = 1;
+        notifyStatus('yellow');
+        const payload = { 
+            logs: pending, 
+            updateSessionId: getSessionId() 
+        };
+
+        // CRITICAL: Return the promise so the UI can await it
+        return fetch(SCRIPT_URL, {
+            method: 'POST',
+            mode: 'cors',
+            body: JSON.stringify(payload)
+        })
+        .then(res => res.text())
+        .then(txt => {
+            // Check for success message from server
+            if (txt.includes("Success")) {
+                const ids = pending.map(l => l.id);
+                markSynced(ids); // ONLY mark synced on success
+                notifyStatus('green');
+                return "Success";
+            }
+            throw new Error(txt);
+        })
+        .catch(err => {
+            notifyStatus('red');
+            console.error("Sync Error:", err);
+            throw err;
         });
-        saveLocalLogs(logs);
     }
 
-    function getLogsForSession(sessionId) {
-         return getLocalLogs().filter(l => l.sessionId == sessionId);
-    }
-    
-    // v3.0 PB Logic adapted for Array
-    async function getPBForRepRange(exerciseName, targetReps) {
-        const logs = getLocalLogs();
-        let minReps = parseInt(targetReps);
-        if(isNaN(minReps)) minReps = 1;
-
-        // Filter by exercise and Reps
-        const matches = logs.filter(l => l.exercise === exerciseName && l.reps >= minReps);
-        if (matches.length === 0) return null;
-
-        // Find Max Weight
-        const maxWeight = matches.reduce((max, l) => Math.max(max, parseFloat(l.weight) || 0), 0);
-        return maxWeight > 0 ? maxWeight : null;
+    async function pullState() {
+        notifyStatus('yellow');
+        try {
+            const res = await fetch(SCRIPT_URL);
+            const data = await res.json();
+            if (data.status === 'success') {
+                if (data.data.CurrentSessionID) setSessionId(data.data.CurrentSessionID);
+                notifyStatus('green');
+                return data.data;
+            }
+        } catch (e) { notifyStatus('red'); }
     }
 
-    // --- 3. STORAGE & SYNC (Shared) ---
-
-    const KEY_SESSION = 'AG_SESSION_ID';
-    const KEY_ODOMETER = 'AG_ODOMETER';
-    const KEY_CONFIG = 'AG_CONFIG';
-
-    function getSessionId() { return parseInt(localStorage.getItem(KEY_SESSION)) || 1; }
-    function setSessionId(id) { localStorage.setItem(KEY_SESSION, id); }
-    
-    function getOdometer() {
-        try { return JSON.parse(localStorage.getItem(KEY_ODOMETER)) || {}; } catch { return {}; }
-    }
-    function setOdometerIndex(slot, index) {
-        const odo = getOdometer();
-        odo[slot] = index;
-        localStorage.setItem(KEY_ODOMETER, JSON.stringify(odo));
-    }
-
-    // CONFIG & API Bridge
-    // CONFIG & API Bridge
-    // v3.7 Hardcoded URL (Recovered from v2.8)
-    const SCRIPT_URL = "https://script.google.com/macros/s/AKfycbxSQFu09yKZoargX3Db7sVcS038IvJpC7U-Wx4PyV-9706WibuA22rowWocrgJUqdU5jg/exec";
-    
     let onSyncStatus = null;
     function registerStatusCallback(cb) { onSyncStatus = cb; }
     function notifyStatus(status) { if (onSyncStatus) onSyncStatus(status); }
 
-    function getConfig() {
-        const conf = JSON.parse(localStorage.getItem(KEY_CONFIG)) || { apiUrl: '' };
-        // v3.7: Force Hardcoded URL if config is empty
-        if (!conf.apiUrl) {
-            return { apiUrl: SCRIPT_URL };
-        }
-        return conf;
-    }
-    function setConfig(conf) { localStorage.setItem(KEY_CONFIG, JSON.stringify(conf)); }
-
-    async function pullState() {
-        const config = getConfig();
-        if (!config.apiUrl) { notifyStatus('red'); return { status: 'no_url' }; }
-        notifyStatus('yellow');
-        try {
-            const res = await fetch(config.apiUrl, { method: 'GET', mode: 'cors', credentials: 'omit' });
-            const data = await res.json();
-             if (data.status === 'success') {
-                if (data.data.CurrentSessionID) setSessionId(parseInt(data.data.CurrentSessionID));
-                notifyStatus('green');
-                return { status: 'success', data: data.data };
-            }
-            notifyStatus('red');
-            return { status: 'error', message: data.message };
-        } catch (e) {
-            notifyStatus('red');
-            return { status: 'offline', error: e };
-        }
-    }
-
-    let isPushing = false;
-
-    async function pushLogs() {
-        if (isPushing) return; // Prevent double-fire
-        isPushing = true;
-
-        const pending = getPendingLogs();
-        if (pending.length === 0) { 
-            notifyStatus('green'); 
-            isPushing = false;
-            return; 
-        }
-
-        const config = getConfig();
-        if (!config.apiUrl) { 
-            notifyStatus('red'); 
-            console.log("Sync Skipped: No API URL");
-            isPushing = false;
-            return; 
-        }
+    // v3.8.2: Fuzzy Matching + Lightweight PB Lookup
+    async function getPBForRepRange(exerciseName, targetReps) {
+        const logs = getLocalLogs();
+        const minReps = parseInt(targetReps) || 1;
+        const searchName = exerciseName.toLowerCase().trim();
         
-        notifyStatus('yellow');
-
-        // v3.7.1: Optimistic Locking
-        // Mark as synced IMMEDIATELY to prevent double-sends
-        const ids = pending.map(l => l.id); 
-        markSynced(ids);
-
-        const payload = { logs: pending, updateSessionId: getSessionId() };
+        const matches = logs.filter(l => 
+            l.exercise && 
+            l.exercise.toLowerCase().trim().includes(searchName) && 
+            parseInt(l.reps) >= minReps
+        );
         
-        // Fetch with CORS (Audit Fix)
-        fetch(config.apiUrl, {
-            method: 'POST', mode: 'cors', credentials: 'omit',
-            headers: { 'Content-Type': 'text/plain' },
-            body: JSON.stringify(payload)
-        })
-        .then(res => res.text()) // Consume body to ensure completion
-        .then(txt => {
-            console.log("Background Push Success:", txt);
-            notifyStatus('green');
-        })
-        .catch(e => {
-            console.log("Background Push Warning (Silent)", e);
-            // We optimized to "Synced". If it failed, data is technically dirty on server, 
-            // but user prefers NO DUPLICATES over retry loops.
-            notifyStatus('red'); 
-        })
-        .finally(() => {
-            isPushing = false;
-        });
+        if (matches.length === 0) return null;
+        return Math.max(...matches.map(l => parseFloat(l.weight) || 0));
     }
 
-    async function manualSync() {
-        notifyStatus('yellow');
-        const pushRes = await pushLogs();
-        const pullRes = await pullState();
-        return { push: pushRes, pull: pullRes };
+    function getOdometer() {
+        // Mock Odometer if missing from original snippet, needed for UI Hub
+         try { return JSON.parse(localStorage.getItem('AG_ODOMETER')) || {}; } catch { return {}; }
+    }
+    
+    function setOdometerIndex(slot, index) {
+        const odo = getOdometer();
+        odo[slot] = index;
+        localStorage.setItem('AG_ODOMETER', JSON.stringify(odo));
     }
 
-    return {
-        initDB,
-        addLog,
-        getPendingLogs,
-        getLogsForSession,
-        getSessionId,
-        setSessionId,
+    return { 
+        initDB, 
+        addLog, 
+        getSessionId, 
+        setSessionId, 
+        pullState, 
+        pushLogs, 
+        getPBForRepRange, 
+        registerStatusCallback, 
+        getLogsForSession: (id) => getLocalLogs().filter(l => l.sessionId == id),
         getOdometer,
-        setOdometerIndex,
-        getConfig,
-        setConfig,
-        pullState,
-        pushLogs,
-        getPBForRepRange,
-        registerStatusCallback,
-        manualSync
+        setOdometerIndex
     };
-
 })();
