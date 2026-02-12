@@ -270,7 +270,7 @@ const HUB = (function() {
             SYNC.setSessionId(nextId);
     
             // 3. FORCE PUSH and WAIT (with 5s timeout)
-            const syncPromise = SYNC.pushLogs();
+            const syncPromise = SYNC.pushLogs(true);
             const timeoutPromise = new Promise((_, reject) => 
                 setTimeout(() => reject(new Error("Timeout")), 5000)
             );

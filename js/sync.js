@@ -51,19 +51,24 @@ const SYNC = window.SYNC = (function() {
 
         saveLocalLogs(logs.concat(newEntries));
         // Trigger background push but don't wait for it here
-        pushLogs(); 
+        pushLogs(false); 
         return true;
     }
 
-    async function pushLogs() {
+    async function pushLogs(updateSession = false) {
         const pending = getLocalLogs().filter(l => l.synced === 0);
-        if (pending.length === 0) return Promise.resolve("No pending data");
+        // CRITICAL: Always handle session updates even if no logs
+        if (pending.length === 0 && !updateSession) return Promise.resolve("No pending data");
 
         notifyStatus('yellow');
         const payload = { 
-            logs: pending, 
-            updateSessionId: getSessionId() + 1
+            logs: pending
         };
+
+        // Only send session update if explicitly requested (by finishSession)
+        if (updateSession) {
+            payload.updateSessionId = getSessionId();
+        }
 
         // CRITICAL: Return the promise so the UI can await it
         return fetch(SCRIPT_URL, {
