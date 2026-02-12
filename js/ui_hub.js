@@ -22,16 +22,25 @@ const HUB = (function() {
             // v3.7 Clean: Init Storage
             SYNC.initDB();
             
-            // Remove overlay immediately if present in HTML (Safety check)
-            const overlay = document.getElementById('init-overlay');
-            if(overlay) overlay.style.display = 'none';
+            // Show Loading State
+            const container = document.getElementById('app-container');
+            container.innerHTML = `<div style="padding:20px; text-align:center;"><h3>Syncing...</h3></div>`;
 
             // v2.8: Register Sync Status Listener
             if(SYNC.registerStatusCallback) {
                 SYNC.registerStatusCallback(setSyncStatus);
             }
+
+            // v3.7.3: FORCE SYNC ON LOAD (Block UI)
+            try {
+                console.log("Blocking UI for Initial Sync...");
+                const syncResult = await SYNC.pullState();
+                console.log("Initial Sync Result:", syncResult);
+            } catch (err) {
+                console.warn("Initial Sync Failed (Offline Mode)", err);
+            }
             
-            // Load initial state
+            // Load initial state (Post-Sync)
             const sessId = SYNC.getSessionId();
             currentSession = ENGINE.getSessionInfo(sessId);
             
@@ -44,14 +53,6 @@ const HUB = (function() {
             // Render Dashboard
             renderDashboard();
             
-            // Background Sync
-            SYNC.pullState().then(res => {
-                if(res.status === 'success') {
-                    if(SYNC.getSessionId() !== sessId) {
-                        location.reload();
-                    }
-                }
-            });
         } catch (e) {
             console.error(e);
             document.getElementById('app-container').innerHTML = `
@@ -59,6 +60,8 @@ const HUB = (function() {
                     <h2>Startup Error</h2>
                     <p>${e.message}</p>
                     <pre style="font-size: 0.7rem; color: #aaa;">${e.stack}</pre>
+                    <br>
+                    <button onclick="HUB.hardReset()">Reset App</button>
                 </div>
             `;
         }
@@ -87,6 +90,14 @@ const HUB = (function() {
             const currentId = parseInt(currentSession.id);
             const newId = SYNC.getSessionId();
             if(newId !== currentId) location.reload();
+        }
+    }
+
+    // v3.7.3: Hard Reset
+    function hardReset() {
+        if(confirm("Confirm Factory Reset? This will wipe unsynced data.")) {
+            localStorage.clear();
+            location.reload();
         }
     }
 
@@ -125,7 +136,7 @@ const HUB = (function() {
             <div id="dashboard-view">
                 <header class="hub-header">
                     <div>
-                        <div style="font-size: 0.75rem; color: var(--primary); margin-bottom: 4px; letter-spacing: 1px; font-weight: bold;">ANTIGRAVITY v3.7 (Clean)</div>
+                        <div style="font-size: 0.75rem; color: var(--primary); margin-bottom: 4px; letter-spacing: 1px; font-weight: bold;">ANTIGRAVITY v3.7.5</div>
                         <h1 style="font-size: 1.2rem;">SESSION ${currentSession.id}</h1>
                         <span class="badge">${currentSession.waveInfo.Name}</span>
                         <span class="badge secondary">${currentSession.isA ? 'Pull/Hinge' : 'Push/Squat'}</span>
@@ -143,18 +154,16 @@ const HUB = (function() {
                     <div style="margin-top:16px; font-size: 0.9rem; text-align: center;">
                         <span id="btn-sync-now" style="color: var(--primary); text-decoration: underline; cursor: pointer;" onclick="HUB.triggerSync()">Sync Now</span>
                     </div>
-                    <div style="margin-top:10px; font-size: 0.7rem; text-align: center; color: #666;">
-                        v3.2 SQLite Engine
+                    <!-- v3.7.3 Hard Reset -->
+                    <div style="margin-top:12px; font-size: 0.7rem; text-align: center; color: #999;">
+                        v3.7.5 &bull; <span style="text-decoration: underline; cursor: pointer;" onclick="HUB.hardReset()">Reset App</span>
                     </div>
-                </div>
-            </div>
-            <div id="module-container" hidden></div>
-            
                 </div>
             </div>
             <div id="module-container" hidden></div>
         `;
     }
+
 
     function renderSlotItem(slot) {
         // v2.6: Use Snapshot instead of live query
@@ -236,15 +245,41 @@ const HUB = (function() {
         refreshCompletionStatus();
     }
     
-    function finishSession() {
+    async function finishSession() {
         if(confirm("Advance to next Session?")) {
-            // v2.6: Clean up the Snapshot for this session
-            const KEY = `AG_SNAPSHOT_${currentSession.id}`;
-            localStorage.removeItem(KEY);
-
             const nextId = parseInt(currentSession.id) + 1;
+            
+            // 1. Update Local IMMEDIATELY (Critical Fix)
             SYNC.setSessionId(nextId);
-            location.reload();
+
+            // 2. Clear ALL Snapshots (Wildcard Fix)
+            // This prevents "Subdued" state from leaking into next session
+            Object.keys(localStorage).forEach(key => {
+                if(key.startsWith('AG_SNAPSHOT_')) {
+                    localStorage.removeItem(key);
+                }
+            });
+
+            // v3.7.4: BLOCKING SYNC (Prevent Reversion)
+            const btn = document.querySelector('.hub-footer button');
+            if(btn) {
+                btn.innerText = "Saving...";
+                btn.disabled = true;
+            }
+
+            // 3. Force Push with 3s Timeout (Emergency Eject)
+            try {
+                // Race: Push vs 3s Timeout
+                const saveTask = SYNC.pushLogs();
+                const timeoutTask = new Promise(resolve => setTimeout(resolve, 3000));
+                
+                await Promise.race([saveTask, timeoutTask]);
+            } catch (e) {
+                console.warn("Save interrupted or failed:", e);
+            } finally {
+                // 4. Reload ALWAYS
+                location.reload();
+            }
         }
     }
 
@@ -253,6 +288,7 @@ const HUB = (function() {
         openModule,
         finishSession,
         triggerSync, // v2.8 export
+        hardReset, // v3.7.3 export
         downloadDB
     };
 
