@@ -126,9 +126,15 @@ const SYNC = window.SYNC = (function() {
     const KEY_SESSION = 'AG_SESSION_ID';
     const KEY_ODOMETER = 'AG_ODOMETER';
     const KEY_CONFIG = 'AG_CONFIG';
+    const KEY_LAST_UPDATE = 'AG_LAST_UPDATE'; // v3.7.4
 
     function getSessionId() { return parseInt(localStorage.getItem(KEY_SESSION)) || 1; }
-    function setSessionId(id) { localStorage.setItem(KEY_SESSION, id); }
+    
+    // v3.7.4: Track Timestamp
+    function setSessionId(id) { 
+        localStorage.setItem(KEY_SESSION, id);
+        localStorage.setItem(KEY_LAST_UPDATE, Date.now().toString());
+    }
     
     function getOdometer() {
         try { return JSON.parse(localStorage.getItem(KEY_ODOMETER)) || {}; } catch { return {}; }
@@ -166,7 +172,20 @@ const SYNC = window.SYNC = (function() {
             const res = await fetch(config.apiUrl, { method: 'GET', mode: 'cors', credentials: 'omit' });
             const data = await res.json();
              if (data.status === 'success') {
-                if (data.data.CurrentSessionID) setSessionId(parseInt(data.data.CurrentSessionID));
+                
+                // v3.7.4: LOCAL MASTERY (Anti-Reversion)
+                const serverId = parseInt(data.data.CurrentSessionID);
+                const localId = getSessionId();
+                const lastUpdate = parseInt(localStorage.getItem(KEY_LAST_UPDATE)) || 0;
+                const timeSinceUpdate = Date.now() - lastUpdate;
+                
+                // If local updated < 15s ago AND Server is BEHIND Local
+                if (timeSinceUpdate < 15000 && serverId < localId) {
+                    console.warn(`[SYNC] Local Mastery: Ignoring Server ID ${serverId} (Local: ${localId} set ${timeSinceUpdate}ms ago)`);
+                    // We DO NOT update local session ID
+                } else {
+                    if (serverId) setSessionId(serverId);
+                }
                 
                 // HYDRATION LOGIC (v3.7.2 Fix)
                 if (data.data.logs && Array.isArray(data.data.logs)) {

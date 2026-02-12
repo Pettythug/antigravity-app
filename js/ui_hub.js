@@ -136,7 +136,7 @@ const HUB = (function() {
             <div id="dashboard-view">
                 <header class="hub-header">
                     <div>
-                        <div style="font-size: 0.75rem; color: var(--primary); margin-bottom: 4px; letter-spacing: 1px; font-weight: bold;">ANTIGRAVITY v3.7.3</div>
+                        <div style="font-size: 0.75rem; color: var(--primary); margin-bottom: 4px; letter-spacing: 1px; font-weight: bold;">ANTIGRAVITY v3.7.4</div>
                         <h1 style="font-size: 1.2rem;">SESSION ${currentSession.id}</h1>
                         <span class="badge">${currentSession.waveInfo.Name}</span>
                         <span class="badge secondary">${currentSession.isA ? 'Pull/Hinge' : 'Push/Squat'}</span>
@@ -156,7 +156,7 @@ const HUB = (function() {
                     </div>
                     <!-- v3.7.3 Hard Reset -->
                     <div style="margin-top:12px; font-size: 0.7rem; text-align: center; color: #999;">
-                        v3.7.3 &bull; <span style="text-decoration: underline; cursor: pointer;" onclick="HUB.hardReset()">Reset App</span>
+                        v3.7.4 &bull; <span style="text-decoration: underline; cursor: pointer;" onclick="HUB.hardReset()">Reset App</span>
                     </div>
                 </div>
             </div>
@@ -245,14 +245,28 @@ const HUB = (function() {
         refreshCompletionStatus();
     }
     
-    function finishSession() {
+    async function finishSession() {
         if(confirm("Advance to next Session?")) {
             // v2.6: Clean up the Snapshot for this session
             const KEY = `AG_SNAPSHOT_${currentSession.id}`;
             localStorage.removeItem(KEY);
 
             const nextId = parseInt(currentSession.id) + 1;
+            
+            // v3.7.4: BLOCKING SYNC (Prevent Reversion)
+            const btn = document.querySelector('.hub-footer button');
+            if(btn) {
+                btn.innerText = "Saving...";
+                btn.disabled = true;
+            }
+
+            // 1. Update Local (Triggering Timestamp)
             SYNC.setSessionId(nextId);
+
+            // 2. Force Push (Critical Path)
+            await SYNC.pushLogs(); // This sends the NEW SessionID because getPending includes it
+
+            // 3. Reload (Now server should be caught up, or LocalMastery will ignore it)
             location.reload();
         }
     }
