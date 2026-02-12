@@ -1,5 +1,5 @@
 /**
- * ANTIGRAVITY v3.8.4 - SYNC CORE
+ * ANTIGRAVITY v3.8.4.1 - SYNC CORE
  * Fixed: Synchronous Handshake & Validated 9-Column Payload
  */
 
@@ -11,7 +11,7 @@ const SYNC = window.SYNC = (function() {
     // NEW DEPLOYMENT URL
     const SCRIPT_URL = "https://script.google.com/macros/s/AKfycbzjzb0F8bixnlvSXhZMYNgi17_TA2gTZYogT-kCa78Ni71-C6rVjtG4m9RM6PplTzyMZA/exec";
 
-    function initDB() { console.log("Sync Engine v3.8.2 Ready."); }
+    function initDB() { console.log("Sync Engine v3.8.4.1 Ready."); }
 
     function getLocalLogs() {
         try { return JSON.parse(localStorage.getItem(KEY_LOGS)) || []; } catch { return []; }
@@ -62,7 +62,7 @@ const SYNC = window.SYNC = (function() {
         notifyStatus('yellow');
         const payload = { 
             logs: pending, 
-            updateSessionId: getSessionId() 
+            updateSessionId: getSessionId() + 1
         };
 
         // CRITICAL: Return the promise so the UI can await it
