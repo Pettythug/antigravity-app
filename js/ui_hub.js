@@ -1,3 +1,4 @@
+<<<<<<< HEAD
 /**
  * ANTIGRAVITY v2.1 - UI HUB
  * Handles: Dashboard Rendering, Navigation, "Done" State, Module Loading
@@ -310,3 +311,313 @@ const HUB = (function() {
 
 // Auto-boot
 window.addEventListener('DOMContentLoaded', HUB.init);
+=======
+/**
+ * ANTIGRAVITY v2.1 - UI HUB
+ * Handles: Dashboard Rendering, Navigation, "Done" State, Module Loading
+ */
+
+const HUB = (function() {
+    console.log("HUB Module Loaded (v3.7.3)");
+
+    let currentSession = null;
+    let completedSlots = new Set(); 
+    let exerciseSnapshot = {}; // v2.6 Lockdown
+
+    async function init() {
+        try {
+            console.log("HUB Init...");
+
+            if (typeof SYNC === 'undefined') throw new Error("SYNC module not loaded. Check js/sync.js");
+            if (typeof ENGINE === 'undefined') throw new Error("ENGINE module not loaded. Check js/engine.js");
+
+            if (typeof ENGINE === 'undefined') throw new Error("ENGINE module not loaded. Check js/engine.js");
+
+            // v3.7 Clean: Init Storage
+            SYNC.initDB();
+            
+            // Show Loading State
+            const container = document.getElementById('app-container');
+            container.innerHTML = `<div style="padding:20px; text-align:center;"><h3>Syncing...</h3></div>`;
+
+            // v2.8: Register Sync Status Listener
+            if(SYNC.registerStatusCallback) {
+                SYNC.registerStatusCallback(setSyncStatus);
+            }
+
+            // v3.7.3: FORCE SYNC ON LOAD (Block UI)
+            try {
+                console.log("Blocking UI for Initial Sync...");
+                const syncResult = await SYNC.pullState();
+                console.log("Initial Sync Result:", syncResult);
+            } catch (err) {
+                console.warn("Initial Sync Failed (Offline Mode)", err);
+            }
+            
+            // Load initial state (Post-Sync)
+            const sessId = SYNC.getSessionId();
+            currentSession = ENGINE.getSessionInfo(sessId);
+            
+            // v2.6: Odometer Lockdown (Snapshot)
+            loadSnapshot(sessId);
+
+            // Load completion status
+            await refreshCompletionStatus();
+            
+            // Render Dashboard
+            renderDashboard();
+            
+        } catch (e) {
+            console.error(e);
+            document.getElementById('app-container').innerHTML = `
+                <div class="card" style="border: 1px solid red; color: red;">
+                    <h2>Startup Error</h2>
+                    <p>${e.message}</p>
+                    <pre style="font-size: 0.7rem; color: #aaa;">${e.stack}</pre>
+                    <br>
+                    <button onclick="HUB.hardReset()">Reset App</button>
+                </div>
+            `;
+        }
+    }
+
+    // v2.8: Sync Visuals
+    function setSyncStatus(status) {
+        const dot = document.getElementById('sync-status');
+        if(!dot) return;
+        
+        // Colors
+        if(status === 'green') dot.style.background = '#4cd964'; // Green
+        if(status === 'yellow') dot.style.background = '#ffcc00'; // Yellow
+        if(status === 'red') dot.style.background = '#ff3b30'; // Red
+    }
+
+    async function triggerSync() {
+        if(SYNC.manualSync) {
+            const btn = document.getElementById('btn-sync-now');
+            if(btn) btn.innerText = "Syncing...";
+            
+            await SYNC.manualSync();
+            
+            if(btn) btn.innerText = "Sync Now";
+            // Refresh dashboard in case ID changed
+            const currentId = parseInt(currentSession.id);
+            const newId = SYNC.getSessionId();
+            if(newId !== currentId) location.reload();
+        }
+    }
+
+    // v3.7.3: Hard Reset
+    function hardReset() {
+        if(confirm("Confirm Factory Reset? This will wipe unsynced data.")) {
+            localStorage.clear();
+            location.reload();
+        }
+    }
+
+    // v2.6 LOCKDOWN LOGIC
+    function loadSnapshot(sessionId) {
+        const KEY = `AG_SNAPSHOT_${sessionId}`;
+        const cached = localStorage.getItem(KEY);
+        
+        if (cached) {
+            exerciseSnapshot = JSON.parse(cached);
+            console.log("Loaded Snapshot:", exerciseSnapshot);
+        } else {
+            console.log("Creating New Snapshot...");
+            const odo = SYNC.getOdometer();
+            exerciseSnapshot = {};
+            currentSession.plan.forEach(slot => {
+                // Capture the name NOW and freeze it
+                exerciseSnapshot[slot] = ENGINE.getExerciseName(slot, odo[slot]);
+            });
+            localStorage.setItem(KEY, JSON.stringify(exerciseSnapshot));
+        }
+    }
+
+    async function refreshCompletionStatus() {
+        completedSlots.clear();
+        const logs = await SYNC.getLogsForSession(currentSession.id);
+        logs.forEach(log => {
+            if (log.slot) completedSlots.add(log.slot);
+        });
+        updateDashboardStatus();
+    }
+
+    function renderDashboard() {
+        const container = document.getElementById('app-container');
+        container.innerHTML = `
+            <div id="dashboard-view">
+                <header class="hub-header">
+                    <div>
+                        <div style="font-size: 0.75rem; color: var(--primary); margin-bottom: 4px; letter-spacing: 1px; font-weight: bold;">ANTIGRAVITY v3.7.5</div>
+                        <h1 style="font-size: 1.2rem;">SESSION ${currentSession.id}</h1>
+                        <span class="badge">${currentSession.waveInfo.Name}</span>
+                        <span class="badge secondary">${currentSession.isA ? 'Pull/Hinge' : 'Push/Squat'}</span>
+                    </div>
+                    <div id="sync-status" class="status-dot"></div>
+                </header>
+
+                <div class="workout-list">
+                    ${currentSession.plan.map(slot => renderSlotItem(slot)).join('')}
+                </div>
+
+                <div class="hub-footer">
+                    <button class="btn btn-secondary" onclick="HUB.finishSession()">Complete Session</button>
+                    <!-- v2.8 Manual Sync -->
+                    <div style="margin-top:16px; font-size: 0.9rem; text-align: center;">
+                        <span id="btn-sync-now" style="color: var(--primary); text-decoration: underline; cursor: pointer;" onclick="HUB.triggerSync()">Sync Now</span>
+                    </div>
+                    <!-- v3.7.3 Hard Reset -->
+                    <div style="margin-top:12px; font-size: 0.7rem; text-align: center; color: #999;">
+                        v3.7.5 &bull; <span style="text-decoration: underline; cursor: pointer;" onclick="HUB.hardReset()">Reset App</span>
+                    </div>
+                </div>
+            </div>
+            <div id="module-container" hidden></div>
+        `;
+    }
+
+
+    function renderSlotItem(slot) {
+        // v2.6: Use Snapshot instead of live query
+        const exerciseName = exerciseSnapshot[slot] || "Unknown";
+        const isDone = completedSlots.has(slot);
+        
+        // v2.7 Vault Lock Logic
+        const clickAction = isDone ? '' : `onclick="HUB.openModule('${slot}')"`;
+        const style = isDone ? 'opacity: 0.6; pointer-events: none;' : '';
+        const icon = isDone ? '<span style="color: #4cd964; font-weight: bold;">✔</span>' : '›';
+        
+        return `
+            <div class="workout-item ${isDone ? 'done' : ''}" ${clickAction} style="${style}">
+                <div class="slot-badge">${slot}</div>
+                <div class="exercise-info">
+                    <div class="exercise-name">${exerciseName}</div>
+                    <div class="exercise-meta">${getMetaForSlot(slot)}</div>
+                </div>
+                <div class="arrow">${icon}</div>
+            </div>
+        `;
+    }
+
+    function getMetaForSlot(slot) {
+        const mod = ENGINE.getModuleForSlot(slot);
+        if (mod === 'power') return `Target: ${ENGINE.getPrimerReps(currentSession.wave)} Reps`;
+        if (mod === 'grind') return `3+ Sets`;
+        if (mod === 'stability') return `Timer`;
+        return `Engine`;
+    }
+
+    function updateDashboardStatus() {
+        renderDashboard();
+    }
+
+    function openModule(slot) {
+        const moduleType = ENGINE.getModuleForSlot(slot);
+        launchModule(moduleType, slot);
+    }
+
+    function launchModule(type, slot) {
+        document.getElementById('dashboard-view').hidden = true;
+        const modContainer = document.getElementById('module-container');
+        modContainer.hidden = false;
+        modContainer.innerHTML = ''; 
+
+        const moduleObj = window[type.toUpperCase()]; 
+        if (moduleObj && moduleObj.init) {
+            // v2.6: Pass the SNAPSHOT name, not live Odometer
+            const exerciseName = exerciseSnapshot[slot] || "Unknown";
+            
+            moduleObj.init(modContainer, {
+                slot: slot,
+                exerciseName: exerciseName,
+                waveInfo: currentSession.waveInfo,
+                onFinish: async (logData) => {
+                    await SYNC.addLog(logData);
+                    
+                    // Rotate Odometer (Behind the scenes)
+                    // The Hub will still show the OLD name until Next Session
+                    const odo = SYNC.getOdometer();
+                    const currentIdx = odo[slot] || 0;
+                    SYNC.setOdometerIndex(slot, currentIdx + 1);
+                    
+                    returnToHub();
+                },
+                onCancel: () => {
+                    returnToHub();
+                }
+            });
+        } else {
+            modContainer.innerText = `Error: Module ${type} not found.`;
+        }
+    }
+
+    function returnToHub() {
+        document.getElementById('module-container').hidden = true;
+        document.getElementById('dashboard-view').hidden = false;
+        refreshCompletionStatus();
+    }
+    
+    async function finishSession() {
+        if(confirm("Advance to next Session?")) {
+            // v2.6: Clean up the Snapshot for this session (Critical: Before Reload)
+            const KEY = `AG_SNAPSHOT_${currentSession.id}`;
+            localStorage.removeItem(KEY);
+
+            const nextId = parseInt(currentSession.id) + 1;
+            
+            // v3.7.4: BLOCKING SYNC (Prevent Reversion)
+            const btn = document.querySelector('.hub-footer button');
+            if(btn) {
+                btn.innerText = "Saving...";
+                btn.disabled = true;
+            }
+
+            // 1. Update Local
+            SYNC.setSessionId(nextId);
+
+            // 2. Force Push with Timeout (v3.7.5 Fix)
+            try {
+                // Race: Push vs 4s Timeout
+                const saveTask = SYNC.pushLogs();
+                const timeoutTask = new Promise(resolve => setTimeout(resolve, 4000));
+                
+                await Promise.race([saveTask, timeoutTask]);
+            } catch (e) {
+                console.warn("Save interrupted or failed:", e);
+            } finally {
+                // 3. Reload ALWAYS
+                location.reload();
+            }
+        }
+    }
+
+    return {
+        init,
+        openModule,
+        finishSession,
+        triggerSync, // v2.8 export
+        hardReset, // v3.7.3 export
+        downloadDB
+    };
+
+    function downloadDB() {
+        const url = SYNC.getExportURL();
+        if(url) {
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = `antigravity_backup_${new Date().toISOString().slice(0,10)}.sqlite`;
+            document.body.appendChild(a);
+            a.click();
+            document.body.removeChild(a);
+        } else {
+            alert("Database not ready.");
+        }
+    }
+
+})();
+
+// Auto-boot
+window.addEventListener('DOMContentLoaded', HUB.init);
+>>>>>>> origin/main

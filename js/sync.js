@@ -249,7 +249,10 @@ const SYNC = window.SYNC = (function() {
             const payload = { logs: pending, updateSessionId: getSessionId() };
             
             // v3.7.5: Async/Await with boolean return
+<<<<<<< HEAD
             // CRITICAL FIX: Return the fetch promise so await logic works
+=======
+>>>>>>> origin/main
             const res = await fetch(config.apiUrl, {
                 method: 'POST', mode: 'cors', credentials: 'omit',
                 headers: { 'Content-Type': 'text/plain' },
