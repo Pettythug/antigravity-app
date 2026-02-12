@@ -1,4 +1,4 @@
-const CACHE_NAME = 'antigravity-v3.7-clean-rev2';
+const CACHE_NAME = 'antigravity-v3.8-hydration';
 const urlsToCache = [
   './',
   './index.html',

@@ -4,7 +4,6 @@
  */
 
 const SYNC = window.SYNC = (function() {
-    console.log("SYNC Module Loaded (v3.7.3)");
 
     // --- 1. LOCAL STORAGE DATABASE ---
     const KEY_LOGS = 'AG_LOGS';
@@ -13,9 +12,6 @@ const SYNC = window.SYNC = (function() {
     // KEY_LOGS declared above implies the log storage key
 
     async function initDB() {
-        if(localStorage.getItem(KEY_LOGS) === null) {
-            localStorage.setItem(KEY_LOGS, JSON.stringify([]));
-        }
         console.log("Storage Ready (LocalStorage).");
     }
 
@@ -96,10 +92,11 @@ const SYNC = window.SYNC = (function() {
          return getLocalLogs().filter(l => l.sessionId == sessionId);
     }
     
-    // v3.7.2 PB FIX: Fuzzy Search + Absolute Max Weight (No Rep Lock)
+    // v3.0 PB Logic adapted for Array
+    // v3.8 PB FIX: Search lightweight server logs
     async function getPBForRepRange(exerciseName) {
-        // v3.7.2 Logic: Direct LocalStorage Access for speed
-        const logs = JSON.parse(localStorage.getItem('AG_LOGS') || '[]');
+        // v3.8: Read from SERVER LOGS (Populated by pullState)
+        const logs = JSON.parse(localStorage.getItem('AG_SERVER_LOGS') || '[]');
         if (logs.length === 0) return null;
 
         const searchName = exerciseName.toLowerCase().trim();
@@ -126,15 +123,9 @@ const SYNC = window.SYNC = (function() {
     const KEY_SESSION = 'AG_SESSION_ID';
     const KEY_ODOMETER = 'AG_ODOMETER';
     const KEY_CONFIG = 'AG_CONFIG';
-    const KEY_LAST_UPDATE = 'AG_LAST_UPDATE'; // v3.7.4
 
     function getSessionId() { return parseInt(localStorage.getItem(KEY_SESSION)) || 1; }
-    
-    // v3.7.4: Track Timestamp
-    function setSessionId(id) { 
-        localStorage.setItem(KEY_SESSION, id);
-        localStorage.setItem(KEY_LAST_UPDATE, Date.now().toString());
-    }
+    function setSessionId(id) { localStorage.setItem(KEY_SESSION, id); }
     
     function getOdometer() {
         try { return JSON.parse(localStorage.getItem(KEY_ODOMETER)) || {}; } catch { return {}; }
@@ -148,7 +139,7 @@ const SYNC = window.SYNC = (function() {
     // CONFIG & API Bridge
     // CONFIG & API Bridge
     // v3.7 Hardcoded URL (Recovered from v2.8)
-    const SCRIPT_URL = "https://script.google.com/macros/s/AKfycbzn6Ms8ytLI7YLKPfMvoFP-rhv-QpV7rSimBfWTYUrg3WarcDS89Ht4wVRVq3y59cIgoA/exec";
+    const SCRIPT_URL = "https://script.google.com/macros/s/AKfycbxMPwwjgHMIjl6UkdjZNuCqsSCPIw8PpD7ZJ-bkeWZSkedjL3MlKoL_fu9rGWH-VFE_1Q/exec";
     
     let onSyncStatus = null;
     function registerStatusCallback(cb) { onSyncStatus = cb; }
@@ -172,41 +163,12 @@ const SYNC = window.SYNC = (function() {
             const res = await fetch(config.apiUrl, { method: 'GET', mode: 'cors', credentials: 'omit' });
             const data = await res.json();
              if (data.status === 'success') {
-                
-                // v3.7.4: LOCAL MASTERY (Anti-Reversion)
                 const serverId = parseInt(data.data.CurrentSessionID);
-                const localId = getSessionId();
-                const lastUpdate = parseInt(localStorage.getItem(KEY_LAST_UPDATE)) || 0;
-                const timeSinceUpdate = Date.now() - lastUpdate;
+                if (serverId) setSessionId(serverId);
                 
-                // If local updated < 15s ago AND Server is BEHIND Local
-                if (timeSinceUpdate < 15000 && serverId < localId) {
-                    console.warn(`[SYNC] Local Mastery: Ignoring Server ID ${serverId} (Local: ${localId} set ${timeSinceUpdate}ms ago)`);
-                    // We DO NOT update local session ID
-                } else {
-                    if (serverId) setSessionId(serverId);
-                }
-                
-                // HYDRATION LOGIC (v3.7.2 Fix)
-                if (data.data.logs && Array.isArray(data.data.logs)) {
-                    console.log("Hydrated Logs Count:", data.data.logs.length);
-                    // Safe Merge: Server Logs + Pending Local Logs
-                    const localLogs = getLocalLogs();
-                    const pending = localLogs.filter(l => l.synced === 0);
-                    
-                    const serverLogs = data.data.logs;
-                    const merged = [...serverLogs];
-                    
-                    // Add pending if they aren't in server list (by ID)
-                    pending.forEach(p => {
-                        if(!merged.find(m => m.id === p.id)) {
-                            merged.push(p);
-                        }
-                    });
-                    
-                    localStorage.setItem(KEY_LOGS, JSON.stringify(merged));
-                } else {
-                    console.log("Hydrated Logs Count: 0 (No logs in response)");
+                // v3.8: Store lightweight logs for PB calculation
+                if (data.data.logs) {
+                    localStorage.setItem('AG_SERVER_LOGS', JSON.stringify(data.data.logs));
                 }
 
                 notifyStatus('green');
@@ -222,52 +184,48 @@ const SYNC = window.SYNC = (function() {
 
     let isPushing = false;
 
-    async function pushLogs() {
-        if (isPushing) return false; // Prevent double-fire
+    // v3.8 Strict Spec
+    function pushLogs() {
+        if (isPushing) return Promise.resolve(false); 
         isPushing = true;
+        notifyStatus('yellow');
 
-        try {
-            const pending = getPendingLogs();
-            if (pending.length === 0) { 
-                notifyStatus('green'); 
-                return true; 
-            }
+        const pending = getPendingLogs();
+        const config = getConfig();
+        
+        if (pending.length === 0 && !config.apiUrl) {
+             isPushing = false;
+             return Promise.resolve(true); 
+        }
 
-            const config = getConfig();
-            if (!config.apiUrl) { 
-                notifyStatus('red'); 
-                console.log("Sync Skipped: No API URL");
-                return false; 
-            }
-            
-            notifyStatus('yellow');
+        const ids = pending.map(l => l.id); 
+        markSynced(ids);
 
-            // v3.7.1: Optimistic Locking
-            const ids = pending.map(l => l.id); 
-            markSynced(ids);
-
-            const payload = { logs: pending, updateSessionId: getSessionId() };
-            
-            // v3.7.5: Async/Await with boolean return
-            // CRITICAL FIX: Return the fetch promise so await logic works
-            const res = await fetch(config.apiUrl, {
-                method: 'POST', mode: 'cors', credentials: 'omit',
-                headers: { 'Content-Type': 'text/plain' },
-                body: JSON.stringify(payload)
-            });
-            
-            const txt = await res.text();
-            console.log("Background Push Success:", txt);
+        const payload = { 
+            logs: pending, 
+            updateSessionId: getSessionId() 
+        };
+        
+        // CRITICAL: Return the fetch promise
+        return fetch(config.apiUrl, {
+            method: 'POST', mode: 'cors', credentials: 'omit',
+            headers: { 'Content-Type': 'text/plain' },
+            body: JSON.stringify(payload)
+        })
+        .then(res => res.text())
+        .then(txt => {
+            console.log("Push Success:", txt);
             notifyStatus('green');
             return true;
-
-        } catch (e) {
-            console.log("Background Push Warning (Silent)", e);
-            notifyStatus('red'); 
+        })
+        .catch(e => {
+            console.warn("Push Warning:", e);
+            notifyStatus('red');
             return false;
-        } finally {
+        })
+        .finally(() => {
             isPushing = false;
-        }
+        });
     }
 
     async function manualSync() {

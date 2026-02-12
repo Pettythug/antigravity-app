@@ -3,12 +3,20 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>Antigravity v3.7.5 (Async Fix)</title>
+    <title>Antigravity v3.8 (Clean Sync)</title>
     <link rel="stylesheet" href="css/main.css">
-    <!-- <link rel="manifest" href="manifest.json"> -->
+    <link rel="manifest" href="manifest.json">
     <script>
-        console.log("Index HTML Loaded");
-        // Service Worker intentionally disabled for GH-FIX
+        if ('serviceWorker' in navigator) {
+            window.addEventListener('load', () => {
+                navigator.serviceWorker.register('service-worker.js')
+                .then(registration => {
+                    console.log('SW Registered: ', registration.scope);
+                }, err => {
+                    console.log('SW Registration Failed: ', err);
+                });
+            });
+        }
     </script>
 </head>
 <body>
