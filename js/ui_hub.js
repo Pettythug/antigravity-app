@@ -8,6 +8,7 @@ const HUB = (function() {
     let currentSession = null;
     let completedSlots = new Set(); 
     let exerciseSnapshot = {}; // v2.6 Lockdown
+    let isSyncing = false; // Global Sync Lock
 
     async function init() {
         try {
@@ -218,15 +219,21 @@ const HUB = (function() {
                 exerciseName: exerciseName,
                 waveInfo: currentSession.waveInfo,
                 onFinish: async (logData) => {
-                    await SYNC.addLog(logData);
-                    
-                    // Rotate Odometer (Behind the scenes)
-                    // The Hub will still show the OLD name until Next Session
-                    const odo = SYNC.getOdometer();
-                    const currentIdx = odo[slot] || 0;
-                    SYNC.setOdometerIndex(slot, currentIdx + 1);
-                    
-                    returnToHub();
+                    if (isSyncing) return;
+                    isSyncing = true;
+                    try {
+                        await SYNC.addLog(logData);
+                        
+                        // Rotate Odometer (Behind the scenes)
+                        // The Hub will still show the OLD name until Next Session
+                        const odo = SYNC.getOdometer();
+                        const currentIdx = odo[slot] || 0;
+                        SYNC.setOdometerIndex(slot, currentIdx + 1);
+                        
+                        returnToHub();
+                    } finally {
+                        isSyncing = false;
+                    }
                 },
                 onCancel: () => {
                     returnToHub();
@@ -244,11 +251,14 @@ const HUB = (function() {
     }
     
     async function finishSession() {
+        if (isSyncing) return;
         if (!confirm("Advance to next Session?")) return;
+        
+        isSyncing = true;
     
         const btn = document.querySelector('.hub-footer .btn');
         if(btn) {
-             btn.innerText = "Saving to Google...";
+             btn.innerText = "Syncing...";
              btn.style.opacity = "0.5";
              btn.disabled = true;
         }
@@ -271,6 +281,7 @@ const HUB = (function() {
         } catch (e) {
             console.warn("Sync failed or timed out, but advancing anyway.", e);
         } finally {
+            isSyncing = false;
             // 4. Clean up snapshot and refresh
             const KEY = `AG_SNAPSHOT_${currentSession.id}`;
             localStorage.removeItem(KEY);
