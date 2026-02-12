@@ -45,8 +45,14 @@ const HUB = (function() {
             
             // Background Sync
             SYNC.pullState().then(res => {
-                if(res.status === 'success') {
-                    if(SYNC.getSessionId() !== sessId) {
+                if (res && res.CurrentSessionID) {
+                    const localId = SYNC.getSessionId();
+                    const serverId = parseInt(res.CurrentSessionID);
+                    
+                    // Only reload if we are BEHIND the server. 
+                    // If we are AHEAD (local 10, server 9), it means a sync is pending. Don't loop.
+                    if (serverId > localId) {
+                        console.log("Server is ahead. Updating local session.");
                         location.reload();
                     }
                 }
@@ -124,7 +130,7 @@ const HUB = (function() {
             <div id="dashboard-view">
                 <header class="hub-header">
                     <div>
-                        <div style="font-size: 0.75rem; color: var(--primary); margin-bottom: 4px; letter-spacing: 1px; font-weight: bold;">ANTIGRAVITY v3.8.1</div>
+                        <div style="font-size: 0.75rem; color: var(--primary); margin-bottom: 4px; letter-spacing: 1px; font-weight: bold;">ANTIGRAVITY v3.8.3</div>
                         <h1 style="font-size: 1.2rem;">SESSION ${currentSession.id}</h1>
                         <span class="badge">${currentSession.waveInfo.Name}</span>
                         <span class="badge secondary">${currentSession.isA ? 'Pull/Hinge' : 'Push/Squat'}</span>
@@ -140,7 +146,7 @@ const HUB = (function() {
                     <button class="btn btn-secondary" onclick="HUB.finishSession()">Complete Session</button>
                     <!-- v2.8 Manual Sync -->
                     <div style="margin-top:16px; font-size: 0.9rem; text-align: center;">
-                        v3.8.1 &bull; <span style="text-decoration: underline; cursor: pointer;" onclick="HUB.hardReset()">Reset App</span>
+                        v3.8.3 &bull; <span style="text-decoration: underline; cursor: pointer;" onclick="HUB.hardReset()">Reset App</span>
                     </div>
                     <div style="margin-top:10px; font-size: 0.7rem; text-align: center; color: #666;">
                         v3.2 SQLite Engine
@@ -235,14 +241,37 @@ const HUB = (function() {
         refreshCompletionStatus();
     }
     
-    function finishSession() {
-        if(confirm("Advance to next Session?")) {
-            // v2.6: Clean up the Snapshot for this session
+    async function finishSession() {
+        if (!confirm("Advance to next Session?")) return;
+    
+        const btn = document.querySelector('.hub-footer .btn');
+        if(btn) {
+             btn.innerText = "Saving to Google...";
+             btn.style.opacity = "0.5";
+             btn.disabled = true;
+        }
+        
+        try {
+            // 2. Increment Locally first
+            const currentId = parseInt(currentSession.id);
+            const nextId = currentId + 1;
+            SYNC.setSessionId(nextId);
+    
+            // 3. FORCE PUSH and WAIT (with 5s timeout)
+            const syncPromise = SYNC.pushLogs();
+            const timeoutPromise = new Promise((_, reject) => 
+                setTimeout(() => reject(new Error("Timeout")), 5000)
+            );
+    
+            await Promise.race([syncPromise, timeoutPromise]);
+            
+            console.log("Sync confirmed. Reloading...");
+        } catch (e) {
+            console.warn("Sync failed or timed out, but advancing anyway.", e);
+        } finally {
+            // 4. Clean up snapshot and refresh
             const KEY = `AG_SNAPSHOT_${currentSession.id}`;
             localStorage.removeItem(KEY);
-
-            const nextId = parseInt(currentSession.id) + 1;
-            SYNC.setSessionId(nextId);
             location.reload();
         }
     }
